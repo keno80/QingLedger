@@ -1,0 +1,3 @@
+<resources>
+    <string name="ledger_accessibility_description">仅在你开启采集并选择来源后，读取支付宝或微信可见交易成功页面的文字，识别金额和收支方向后直接记账。不保存页面原文，不点击、不操作付款。错误可在轻账中修改或删除，可随时暂停或关闭服务。</string>
+</resources>
