@@ -10,6 +10,7 @@ interface CaptureRepository {
     suspend fun setEnabled(enabled: Boolean)
     suspend fun setSource(source: String, enabled: Boolean)
     suspend fun capture(event: CapturedNotification, proposal: NotificationProposal): Boolean
+    suspend fun capturedState(event: CapturedNotification): String?
     suspend fun confirm(id: String, draft: TransactionDraft): String
     suspend fun ignore(id: String)
     suspend fun merge(id: String, transactionId: String)

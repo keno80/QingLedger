@@ -1,7 +1,11 @@
 package io.qingledger.app.automationui
 
 import android.content.Intent
+import android.Manifest
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -33,9 +37,19 @@ fun AutomationScreen(capture: CaptureViewModel) {
     val message by capture.message.collectAsStateWithLifecycle()
     val runtimeError by capture.runtimeError.collectAsStateWithLifecycle()
     val lastEvent by capture.lastEvent.collectAsStateWithLifecycle()
+    var noticesEnabled by remember { mutableStateOf(capture.notificationsEnabled()) }
+    var promotionAllowed by remember { mutableStateOf(capture.promotionAllowed()) }
+    val requestNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        noticesEnabled = capture.notificationsEnabled()
+        promotionAllowed = capture.promotionAllowed()
+    }
     DisposableEffect(owner, capture) {
         capture.refreshAccess()
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) capture.refreshAccess() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) {
+            capture.refreshAccess()
+            noticesEnabled = capture.notificationsEnabled()
+            promotionAllowed = capture.promotionAllowed()
+        } }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
@@ -60,6 +74,21 @@ fun AutomationScreen(capture: CaptureViewModel) {
             else -> "正在采集所选来源"
         }
         StatusCard(title, "识别到明确金额和收支方向后直接入账，无需确认；不准确时可在账单中编辑或删除。金额或方向不明确的通知将跳过。")
+        SettingsGroup("识别通知") {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(if (!noticesEnabled) "通知未开启：识别仍正常运行，但无法显示进度和结果。" else "识别中显示进度，完成后更新同一条通知，30秒后自动收起。")
+                Text(if (Build.VERSION.SDK_INT < 36) "当前系统使用普通进度通知。" else if (promotionAllowed) "已允许实时更新，具体展示形式由系统决定。" else "实时更新未允许，使用普通通知。")
+                Button(onClick = {
+                    if (Build.VERSION.SDK_INT >= 33 && !noticesEnabled) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                }, modifier = Modifier.fillMaxWidth()) { Text(if (noticesEnabled) "通知设置" else "开启识别通知") }
+                if (Build.VERSION.SDK_INT >= 36) Button(onClick = {
+                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent)
+                    else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                }, modifier = Modifier.fillMaxWidth()) { Text("实时更新设置") }
+            }
+        }
         SettingsDescription("${method.label}状态", "权限：${if (access) "已授权" else "未授权"} · 监听：${if (connected) "已连接" else "未连接"}")
         if (method == CaptureMethod.ACCESSIBILITY) {
             StatusCard("无障碍访问说明", "开启后只读取所选支付应用可见交易成功页面的文字，识别后直接入账。不保存页面原文，不点击、不操作付款。页面覆盖仍待验证，可随时暂停或在系统设置关闭。")

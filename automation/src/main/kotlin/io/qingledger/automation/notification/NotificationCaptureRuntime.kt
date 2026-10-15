@@ -42,6 +42,10 @@ class NotificationCaptureRuntime(
     val error = mutableError.asStateFlow()
     private val mutableLastEvent = MutableStateFlow<Long?>(null)
     val lastEvent = mutableLastEvent.asStateFlow()
+    private val liveNotification = CaptureLiveNotification(app)
+    private val noticeGate = CaptureNoticeGate()
+    fun notificationsEnabled() = liveNotification.notificationsEnabled()
+    fun promotionAllowed() = liveNotification.promotionAllowed()
 
     init {
         scope.launch {
@@ -57,22 +61,37 @@ class NotificationCaptureRuntime(
         }
         scope.launch {
             for ((event, text, origin, accountName) in queue) {
+                var announced = false
                 try {
-                    if (origin != method.value) continue
+                    if (!isCurrent(event, origin)) continue
                     val parsed = (if (origin == CaptureMethod.ACCESSIBILITY) AccessibilityRules.propose(text) else NotificationRules.propose(text)) ?: continue
+                    if (repository.capturedState(event) != null) continue
+                    if (noticeGate.accept("${event.generation}|${event.sessionKey}|${event.digest}")) {
+                        liveNotification.started()
+                        announced = true
+                    }
                     val proposal = parsed.copy(accountName = parsed.accountName ?: accountName)
                     val version = try {
                         @Suppress("DEPRECATION")
                         app.packageManager.getPackageInfo(event.sourcePackage, 0).longVersionCode
                     } catch (_: Exception) { null }
-                    if (repository.capture(event.copy(versionCode = version), proposal)) mutableLastEvent.value = event.receivedAt
+                    if (repository.capture(event.copy(versionCode = version), proposal)) {
+                        mutableLastEvent.value = event.receivedAt
+                        if (isCurrent(event, origin)) liveNotification.finished(repository.capturedState(event)) else liveNotification.cancel()
+                    } else liveNotification.cancel()
+                    announced = false
                 } catch (error: Exception) {
                     if (error is CancellationException) throw error
                     mutableError.value = "事件保存失败，可能存在未采集记录。"
+                    if (isCurrent(event, origin)) { liveNotification.finished(null); announced = false }
+                } finally {
+                    if (announced) liveNotification.cancel()
                 }
             }
         }
     }
+    private fun isCurrent(event: CapturedNotification, origin: CaptureMethod): Boolean =
+        origin == method.value && settings.value.enabled && event.generation == settings.value.generation && event.sourcePackage in settings.value.sources
     fun hasAccess(): Boolean = app.getSystemService(NotificationManager::class.java)
         .isNotificationListenerAccessGranted(ComponentName(app, LedgerNotificationListener::class.java))
     fun hasAccessibilityAccess(): Boolean {

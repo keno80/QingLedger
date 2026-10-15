@@ -18,6 +18,7 @@ class RoomCaptureRepository(
     }
     override val candidates = dao.candidates().map { rows -> rows.map { PendingCandidate(it.id, it.sourcePackage, it.versionCode, it.receivedAt, it.amountMinor, it.kind?.let(TransactionKind::valueOf), it.reason, it.state, it.transactionId, it.relatedTransactionId) } }
     override val pendingCount = dao.pendingCount()
+    override suspend fun capturedState(event: CapturedNotification): String? = dao.replay(event.sessionKey, event.digest)?.state
     override suspend fun setEnabled(enabled: Boolean) = database.withTransaction {
         dao.seed(CaptureConfiguration())
         dao.setEnabled(enabled)
