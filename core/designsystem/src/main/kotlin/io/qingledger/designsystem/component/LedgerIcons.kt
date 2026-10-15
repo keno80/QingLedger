@@ -11,6 +11,12 @@ import androidx.compose.ui.unit.dp
 
 /** Original vector drawings; no image assets copied from the reference project. */
 object LedgerIcons {
+    val Add = icon("Add") { moveTo(12f, 5f); lineTo(12f, 19f); moveTo(5f, 12f); lineTo(19f, 12f) }
+    val Back = icon("Back") { moveTo(15f, 5f); lineTo(8f, 12f); lineTo(15f, 19f) }
+    val Next = icon("Next") { moveTo(9f, 5f); lineTo(16f, 12f); lineTo(9f, 19f) }
+    val Search = icon("Search") { moveTo(16f, 16f); lineTo(21f, 21f); moveTo(11f, 3f); curveTo(21f, 3f, 21f, 18f, 11f, 18f); curveTo(1f, 18f, 1f, 3f, 11f, 3f) }
+    val Filter = icon("Filter") { moveTo(4f, 7f); lineTo(20f, 7f); moveTo(4f, 17f); lineTo(20f, 17f); moveTo(9f, 4f); lineTo(9f, 10f); moveTo(15f, 14f); lineTo(15f, 20f) }
+    val User = icon("User") { moveTo(8f, 8f); curveTo(8f, 2f, 16f, 2f, 16f, 8f); curveTo(16f, 14f, 8f, 14f, 8f, 8f); moveTo(4f, 21f); curveTo(4f, 11f, 20f, 11f, 20f, 21f) }
     val Ledger = icon("Ledger") {
         moveTo(5f, 3f); lineTo(19f, 3f); lineTo(19f, 21f); lineTo(5f, 21f); close()
         moveTo(9f, 8f); lineTo(15f, 8f)

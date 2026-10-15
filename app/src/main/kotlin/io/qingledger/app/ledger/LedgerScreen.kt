@@ -1,65 +1,136 @@
 package io.qingledger.app.ledger
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.qingledger.designsystem.component.*
+import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.*
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, onAdd: () -> Unit, onOpen: (String) -> Unit) {
+fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, onOpen: (String) -> Unit) {
+    item("ledger-header") {
+        Row(Modifier.fillMaxWidth().padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("账本", Modifier.weight(1f), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = { viewModel.changeMonth(-1) }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "上月", modifier = Modifier.size(18.dp)) }
+            Text("${state.selection.month.year}年${state.selection.month.monthValue}月", fontSize = 14.sp)
+            IconButton(onClick = { viewModel.changeMonth(1) }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Next, "下月", modifier = Modifier.size(18.dp)) }
+        }
+    }
     item("overview") {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            var showFilters by rememberSaveable { mutableStateOf(false) }
-            MonthSelector(state, viewModel)
-            Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("本月净支出", color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontSize = 14.sp)
-                    AmountText(state.summary.expense)
-                    Text("收入 ${formatMoney(state.summary.income)}", fontSize = 14.sp)
-                    Text("结余 ${formatMoney(state.summary.balance)}", fontSize = 14.sp)
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(20.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("本月概览", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("日常账本", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("支出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text(formatMoney(state.summary.expense), fontSize = 32.sp, fontWeight = FontWeight.SemiBold, color = LedgerColors.expense)
+            Spacer(Modifier.height(18.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("收入", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    Text(formatMoney(state.summary.income), fontSize = 17.sp, fontWeight = FontWeight.Medium, color = LedgerColors.income)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("结余", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    Text(formatMoney(state.summary.balance), fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 }
             }
-            Button(onClick = onAdd, enabled = !state.loading, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp, colors = ButtonDefaults.buttonColorsPrimary()) { Text("记一笔") }
-            TextField(value = state.selection.query, onValueChange = viewModel::search, label = "搜索商户或备注", singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { showFilters = !showFilters }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showFilters) "收起筛选" else if (state.selection.kind != null || state.selection.categoryId != null || state.selection.accountId != null) "筛选（已设置）" else "筛选账单")
-            }
-            if (showFilters) {
-                ChoiceGroup("类型", listOf(null to "全部") + TransactionKind.entries.map { it to it.label }, state.selection.kind, viewModel::filter)
-                ChoiceGroup("分类", listOf(null to "全部分类") + state.categories.filter { state.selection.kind == null || it.kind == state.selection.kind }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.categoryId, viewModel::filterCategory)
-                ChoiceGroup("账户", listOf(null to "全部账户") + state.accounts.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.accountId, viewModel::filterAccount)
-            }
-            if (state.loading) StatusCard("正在打开账本", "请稍候。")
-            else if (state.rows.isEmpty()) StatusCard("暂无账单", "点击记一笔，或者调整月份和筛选条件。")
         }
     }
+    item("search") { LedgerSearchAndFilters(state, viewModel) }
+    if (state.loading) item("loading") { StatusCard("正在打开账本", "请稍候。") }
+    else if (state.rows.isEmpty()) item("empty") { StatusCard("暂无账单", "点击底部加号记一笔，或调整月份和筛选条件。") }
     val zone = ZoneId.of(state.zoneId)
+    val today = LocalDate.now(zone)
     state.rows.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() }.forEach { (date, rows) ->
-        item("day-$date") { Text(date.format(DateTimeFormatter.ofPattern("M 月 d 日")), fontSize = 14.sp, color = MiuixTheme.colorScheme.onBackgroundVariant) }
-        items(rows, key = { it.id }) { row ->
-            Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp), onClick = { onOpen(row.id) }) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(row.merchant.ifBlank { state.categories.find { it.id == row.categoryId }?.name ?: row.kind.label }, fontWeight = FontWeight.SemiBold)
-                    Text((when (row.kind) { TransactionKind.INCOME -> "+"; TransactionKind.EXPENSE -> "−"; TransactionKind.TRANSFER -> "转账 " }) + formatMoney(row.amountMinor), fontSize = 22.sp)
-                    Text(if (row.kind == TransactionKind.TRANSFER) "${state.accounts.find { it.id == row.fromAccountId }?.name} → ${state.accounts.find { it.id == row.toAccountId }?.name}" else "${row.kind.label} · ${state.categories.find { it.id == row.categoryId }?.name ?: "未分类"} · ${state.accounts.find { it.id == row.accountId }?.name ?: "未指定账户"}", fontSize = 13.sp)
-                    if (row.note.isNotBlank()) Text(row.note, fontSize = 13.sp)
+        item("day-$date") {
+            Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                val prefix = when (date) { today -> "今天 · "; today.minusDays(1) -> "昨天 · "; else -> "" }
+                Text(prefix + date.format(DateTimeFormatter.ofPattern("M月d日")), Modifier.weight(1f), fontSize = 12.sp)
+                // Filters and pagination can produce partial days, so do not imply a full daily total.
+                Text("${rows.size}笔", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+            }
+        }
+        itemsIndexed(rows, key = { _, row -> row.id }) { index, row -> LedgerCompactRow(row, state, index == 0, index == rows.lastIndex) { onOpen(row.id) } }
+    }
+    if (state.rows.size >= state.selection.limit && state.selection.limit < 10000) item("load-more") { Button(onClick = viewModel::loadMore, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("加载更多") } }
+}
+
+@Composable
+private fun LedgerSearchAndFilters(state: LedgerUiState, viewModel: LedgerViewModel) {
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf(state.selection.query) }
+    var awaitingQuery by remember { mutableStateOf(false) }
+    LaunchedEffect(state.selection.query) {
+        if (state.selection.query == query) awaitingQuery = false
+        else if (!awaitingQuery) query = state.selection.query
+    }
+    val filtered = state.selection.kind != null || state.selection.categoryId != null || state.selection.accountId != null
+    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextField(value = query, onValueChange = { query = it; awaitingQuery = true; viewModel.search(it) }, label = "搜索商户、备注", singleLine = true,
+            modifier = Modifier.weight(1f), cornerRadius = 14.dp,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+            leadingIcon = { Icon(LedgerIcons.Search, null, modifier = Modifier.padding(end = 8.dp).size(18.dp)) })
+        IconButton(onClick = { showFilters = true }, modifier = Modifier.size(48.dp)) {
+            Icon(LedgerIcons.Filter, if (filtered) "筛选账单，已设置" else "筛选账单", tint = if (filtered) LedgerColors.accentContent else MiuixTheme.colorScheme.onBackground, modifier = Modifier.size(22.dp))
+        }
+    }
+    OverlayBottomSheet(show = showFilters, title = "筛选账单", onDismissRequest = { showFilters = false }) {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+            item { ChoiceGroup("类型", listOf(null to "全部") + TransactionKind.entries.map { it to it.label }, state.selection.kind, viewModel::filter) }
+            item { ChoiceGroup("分类", listOf(null to "全部分类") + state.categories.filter { state.selection.kind == null || it.kind == state.selection.kind }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.categoryId, viewModel::filterCategory) }
+            item { ChoiceGroup("账户", listOf(null to "全部账户") + state.accounts.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.accountId, viewModel::filterAccount) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { viewModel.filter(null); viewModel.filterAccount(null) }, modifier = Modifier.weight(1f)) { Text("重置") }
+                    Button(onClick = { showFilters = false }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text("完成") }
                 }
             }
         }
     }
-    if (state.rows.size >= state.selection.limit && state.selection.limit < 10000) item("load-more") { Button(onClick = viewModel::loadMore, modifier = Modifier.fillMaxWidth()) { Text("加载更多") } }
+}
+
+@Composable
+private fun LedgerCompactRow(row: LedgerTransaction, state: LedgerUiState, first: Boolean, last: Boolean, onOpen: () -> Unit) {
+    val category = state.categories.find { it.id == row.categoryId }?.name ?: "未分类"
+    fun account(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
+    val accounts = if (row.kind == TransactionKind.TRANSFER) "${account(row.fromAccountId)} → ${account(row.toAccountId)}" else account(row.accountId)
+    val amountColor = when (row.kind) { TransactionKind.EXPENSE -> LedgerColors.expense; TransactionKind.INCOME -> LedgerColors.income; TransactionKind.TRANSFER -> MiuixTheme.colorScheme.onSurface }
+    val shape = RoundedCornerShape(topStart = if (first) 22.dp else 0.dp, topEnd = if (first) 22.dp else 0.dp, bottomStart = if (last) 22.dp else 0.dp, bottomEnd = if (last) 22.dp else 0.dp)
+    Card(Modifier.fillMaxWidth().clip(shape), cornerRadius = 0.dp, insideMargin = PaddingValues(horizontal = 16.dp, vertical = 0.dp), onClick = onOpen) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(12.dp)).background(LedgerColors.accentSurface), contentAlignment = Alignment.Center) {
+                Icon(if (row.kind == TransactionKind.TRANSFER) LedgerIcons.Next else LedgerIcons.Ledger, null, tint = LedgerColors.accentContent, modifier = Modifier.size(19.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(row.merchant.ifBlank { if (row.kind == TransactionKind.TRANSFER) "账户转账" else category }, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text((if (row.kind == TransactionKind.TRANSFER) accounts else "$category · $accounts") + " · " + Instant.ofEpochMilli(row.occurredAt).atZone(ZoneId.of(state.zoneId)).format(DateTimeFormatter.ofPattern("HH:mm")), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = amountColor)
+                Text(when (row.sourcePackage) { "com.tencent.mm" -> "微信"; "com.eg.android.AlipayGphone" -> "支付宝"; "io.qingledger.paymentsimulator" -> "测试器"; null -> if (row.kind == TransactionKind.TRANSFER) "转账" else "手动"; else -> "自动记账" }, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
+        }
+        if (!last) Box(Modifier.fillMaxWidth().padding(start = 44.dp).height(0.5.dp).background(MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.12f)))
+    }
 }

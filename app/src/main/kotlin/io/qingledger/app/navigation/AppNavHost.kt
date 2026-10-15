@@ -1,16 +1,9 @@
 package io.qingledger.app.navigation
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import io.qingledger.app.settings.MyScreen
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -37,8 +30,8 @@ import io.qingledger.app.statistics.StatisticsScreen
 import io.qingledger.designsystem.component.LedgerIcons
 import io.qingledger.domain.model.ThemeMode
 import io.qingledger.domain.repository.SettingsRepository
-import top.yukonga.miuix.kmp.basic.NavigationBar
-import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.Button
@@ -58,13 +51,14 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var screen by rememberSaveable { mutableStateOf("list") }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var session by rememberSaveable { mutableStateOf(0) }
+    var referenceParent by rememberSaveable { mutableStateOf("list") }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
         value = true to null
         value = if (selectedId == null) false to null else try { false to ledger.get(selectedId!!) } catch (_: Exception) { false to null }
     }
     fun closePage() {
         if (screen != "list") stateHolder.removeState("$screen-$selectedId-$session")
-        screen = "list"
+        screen = when (screen) { "candidate" -> "automation"; "automation" -> "preferences"; "categories", "accounts" -> referenceParent; else -> "list" }
         selectedId = null
     }
     fun openEditor(id: String?) { selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
@@ -87,23 +81,11 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             }
         },
         bottomBar = {
-            if (screen == "list") {
-            NavigationBar {
-                AppRoute.entries.forEach { item ->
-                    NavigationBarItem(
-                        selected = route == item,
-                        onClick = { savedRoute = item.name },
-                        icon = when (item) {
-                            AppRoute.LEDGER -> LedgerIcons.Ledger
-                            AppRoute.STATISTICS -> LedgerIcons.Statistics
-                            AppRoute.AUTOMATION -> LedgerIcons.Automation
-                            AppRoute.SETTINGS -> LedgerIcons.Settings
-                        },
-                        label = item.title,
-                    )
-                }
-            }
-            }
+            if (screen == "list" && route != AppRoute.AUTOMATION) AppBottomBar(
+                route = route,
+                onSelect = { savedRoute = it.name },
+                onAdd = { if (!state.loading && !busy) openEditor(null) },
+            )
         },
     ) { insets ->
         stateHolder.SaveableStateProvider(if (screen == "list") route.name else "$screen-$selectedId-$session") {
@@ -112,13 +94,15 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             LazyColumn(
                 state = pageState,
                 modifier = Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(if (screen == "list" && route == AppRoute.LEDGER) 0.dp else 16.dp),
             ) {
-                item(key = "header") {
+                if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(when (screen) { "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                        if (screen == "list") Text(route.subtitle, fontSize = 14.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
+                            Text(when (screen) { "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
                 when {
@@ -136,13 +120,14 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, ::closePage, history)
                     } }
                     screen == "categories" || screen == "accounts" -> item { ReferenceManagementScreen(state, ledger, screen == "categories", busy, ::closePage, { pageScope.launch { pageState.animateScrollToItem(0) } }) }
-                    route == AppRoute.LEDGER -> ledgerPage(state, ledger, { openEditor(null) }, { selectedId = it; session++; screen = "detail"; ledger.clearMessage() })
-                    route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) }
-                    route == AppRoute.AUTOMATION -> {
+                    screen == "preferences" -> item { SettingsScreen(themeMode, settingsRepository, { referenceParent = "preferences"; session++; screen = "categories"; ledger.clearMessage() }, { referenceParent = "preferences"; session++; screen = "accounts"; ledger.clearMessage() }, { session++; screen = "automation" }) }
+                    screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture) }
                         captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }
                     }
-                    else -> item { SettingsScreen(themeMode, settingsRepository, { session++; screen = "categories"; ledger.clearMessage() }, { session++; screen = "accounts"; ledger.clearMessage() }) }
+                    route == AppRoute.LEDGER -> ledgerPage(state, ledger, { selectedId = it; session++; screen = "detail"; ledger.clearMessage() })
+                    route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) }
+                    else -> item { MyScreen({ referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
                 }
             }
         }

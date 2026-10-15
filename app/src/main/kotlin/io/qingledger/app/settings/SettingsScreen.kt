@@ -27,11 +27,14 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text
 
 @Composable
-fun SettingsScreen(themeMode: ThemeMode, settingsRepository: SettingsRepository, onCategories: () -> Unit, onAccounts: () -> Unit) {
+fun SettingsScreen(themeMode: ThemeMode, settingsRepository: SettingsRepository, onCategories: () -> Unit, onAccounts: () -> Unit, onAutomation: () -> Unit) {
     val scope = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsGroup("自动记账") {
+            Button(onClick = onAutomation, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("自动记账与识别通知") }
+        }
         SettingsGroup("账本管理") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onCategories, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("分类管理") }
@@ -78,7 +81,21 @@ fun SettingsScreen(themeMode: ThemeMode, settingsRepository: SettingsRepository,
             SettingsDescription("本地优先", "无需账号。账单保存在本机，不联网。通知采集需单独授权并主动选择来源。")
         }
         SettingsGroup("关于") {
-            SettingsDescription("轻账", "0.5.3 · 无障碍记账预览版")
+            SettingsDescription("轻账", io.qingledger.app.BuildConfig.VERSION_NAME + " · 本地自动记账")
         }
+    }
+}
+
+@Composable
+fun MyScreen(onCategories: () -> Unit, onAccounts: () -> Unit, onSettings: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SettingsGroup("我的轻账") { SettingsDescription("日常账本", "数据保存在本机") }
+        SettingsGroup("账本管理") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAccounts, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("资金账户") }
+                Button(onClick = onCategories, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("分类管理") }
+            }
+        }
+        Button(onClick = onSettings, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("设置") }
     }
 }
