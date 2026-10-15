@@ -1,47 +1,75 @@
 package io.qingledger.app.ledger
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.qingledger.designsystem.component.*
+import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, onBack: () -> Unit, history: List<TransactionChange>) {
-    var confirming by rememberSaveable { mutableStateOf(false) }
+fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, history: List<TransactionChange>) {
+    var confirming by rememberSaveable(row.id) { mutableStateOf(false) }
+    var showHistory by rememberSaveable(row.id) { mutableStateOf(false) }
+    val category = state.categories.find { it.id == row.categoryId }?.name ?: "未分类"
+    fun account(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
+    fun time(value: Long, seconds: Boolean = false) = Instant.ofEpochMilli(value).atZone(ZoneId.of(row.zoneId))
+        .format(DateTimeFormatter.ofPattern(if (seconds) "yyyy-MM-dd HH:mm:ss" else "yyyy年M月d日 HH:mm"))
+    val amountColor = when (row.kind) {
+        TransactionKind.EXPENSE -> LedgerColors.expense
+        TransactionKind.INCOME -> LedgerColors.income
+        TransactionKind.TRANSFER -> MiuixTheme.colorScheme.onSurface
+    }
+    val source = row.sourcePackage?.let { io.qingledger.app.automationui.sourceLabel(it) } ?: "手动记账"
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(20.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(row.kind.label)
-                AmountText(row.amountMinor)
-                SettingsDescription("商户 / 标题", row.merchant.ifBlank { "未填写" })
-                SettingsDescription("分类", state.categories.find { it.id == row.categoryId }?.name ?: "未分类")
-                if (row.kind == TransactionKind.TRANSFER) {
-                    SettingsDescription("转出账户", state.accounts.find { it.id == row.fromAccountId }?.name ?: "未指定")
-                    SettingsDescription("转入账户", state.accounts.find { it.id == row.toAccountId }?.name ?: "未指定")
-                } else SettingsDescription("资金账户", state.accounts.find { it.id == row.accountId }?.name ?: "未指定")
-                SettingsDescription("时间", Instant.ofEpochMilli(row.occurredAt).atZone(ZoneId.of(row.zoneId)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
-                SettingsDescription("备注", row.note.ifBlank { "未填写" })
-                SettingsDescription("来源", row.sourcePackage?.let { io.qingledger.app.automationui.sourceLabel(it) + " · 自动采集" } ?: "手动记账")
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(24.dp)) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(48.dp).clip(CircleShape).background(LedgerColors.accentSurface), contentAlignment = Alignment.Center) {
+                    Icon(if (row.kind == TransactionKind.TRANSFER) LedgerIcons.Next else LedgerIcons.Ledger, null, tint = LedgerColors.accentContent, modifier = Modifier.size(24.dp))
+                }
+                Text(row.merchant.ifBlank { if (row.kind == TransactionKind.TRANSFER) "账户转账" else category }, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(row.kind.label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = amountColor)
+                Text(if (row.sourcePackage == null) "手动记账" else "自动记账 · $source", fontSize = 12.sp, color = LedgerColors.accentContent)
             }
         }
-        Button(onClick = onEdit, enabled = !busy, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("编辑账单") }
-        if (confirming) {
-            StatusCard("确认删除？", "删除后不再计入统计，可在 10 秒内撤销。")
-            Button(onClick = onDelete, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("确认删除") }
-            Button(onClick = { confirming = false }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("保留账单") }
-        } else Button(onClick = { confirming = true }, enabled = !busy, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("删除账单") }
-        Button(onClick = onBack, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("返回账单") }
-        SettingsGroup("修改历史") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (history.isEmpty()) Text("暂无修改记录")
-                history.forEach { change ->
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(horizontal = 20.dp, vertical = 8.dp)) {
+            if (row.kind != TransactionKind.TRANSFER) DetailField("分类", category)
+            if (row.kind == TransactionKind.TRANSFER) {
+                DetailField("转出账户", account(row.fromAccountId))
+                DetailField("转入账户", account(row.toAccountId))
+            } else DetailField("资金账户", account(row.accountId))
+            DetailField("交易时间", time(row.occurredAt))
+            DetailField("记账来源", source, divider = false)
+        }
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(20.dp)) {
+            Text("备注", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Spacer(Modifier.height(10.dp))
+            Text(row.note.ifBlank { "暂无备注" }, fontSize = 14.sp, color = if (row.note.isBlank()) MiuixTheme.colorScheme.onSurfaceVariantSummary else MiuixTheme.colorScheme.onSurface)
+        }
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(20.dp), onClick = { showHistory = !showHistory }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("修改记录", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text("${history.size}条 · ${if (showHistory) "收起" else "展开"}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
+            if (showHistory) {
+                Spacer(Modifier.height(16.dp))
+                if (history.isEmpty()) Text("暂无修改记录", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                history.sortedByDescending { it.occurredAt }.forEachIndexed { index, change ->
                     val title = when {
                         change.operation == "CREATE" -> "新增账单"
                         change.operation == "DELETE" -> "删除账单"
@@ -49,9 +77,34 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
                         change.operation.startsWith("EDIT:") -> "修改" + change.operation.substringAfter(':')
                         else -> "编辑账单"
                     }
-                    SettingsDescription(title, Instant.ofEpochMilli(change.occurredAt).atZone(ZoneId.of(row.zoneId)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                    Column(Modifier.padding(top = if (index == 0) 0.dp else 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(title, fontSize = 13.sp)
+                        Text(time(change.occurredAt, true), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    }
                 }
             }
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { confirming = true }, enabled = !busy, modifier = Modifier.weight(1f), minHeight = 48.dp) { Text("删除账单", color = LedgerColors.expense) }
+            Button(onClick = onEdit, enabled = !busy, modifier = Modifier.weight(1.5f), minHeight = 48.dp, colors = ButtonDefaults.buttonColorsPrimary()) { Text("编辑账单") }
+        }
     }
+    OverlayBottomSheet(show = confirming, title = "删除账单", onDismissRequest = { if (!busy) confirming = false }) {
+        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Text("确定删除这笔${row.kind.label} ${formatMoney(row.amountMinor)} 吗？删除后不再计入统计，可在 10 秒内撤销。", fontSize = 14.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { confirming = false }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("保留账单") }
+                Button(onClick = onDelete, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (busy) "正在删除…" else "确认删除", color = LedgerColors.expense) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailField(label: String, value: String, divider: Boolean = true) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text(label, Modifier.width(64.dp), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        Text(value, Modifier.weight(1f), fontSize = 14.sp)
+    }
+    if (divider) Box(Modifier.fillMaxWidth().height(0.5.dp).background(MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.12f)))
 }

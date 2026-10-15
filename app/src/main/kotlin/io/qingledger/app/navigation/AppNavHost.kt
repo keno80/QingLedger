@@ -117,7 +117,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     screen == "edit" -> item { TransactionEditor(state, selected.second, busy, { ledger.save(it, selected.second, ::closePage) }, ::closePage) }
                     screen == "detail" -> item { selected.second?.let { row ->
                         val history by androidx.compose.runtime.remember(row.id) { ledger.changes(row.id) }.collectAsStateWithLifecycle(initialValue = emptyList())
-                        TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, ::closePage, history)
+                        TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, history)
                     } }
                     screen == "categories" || screen == "accounts" -> item { ReferenceManagementScreen(state, ledger, screen == "categories", busy, ::closePage, { pageScope.launch { pageState.animateScrollToItem(0) } }) }
                     screen == "preferences" -> item { SettingsScreen(themeMode, settingsRepository, { referenceParent = "preferences"; session++; screen = "categories"; ledger.clearMessage() }, { referenceParent = "preferences"; session++; screen = "accounts"; ledger.clearMessage() }, { session++; screen = "automation" }) }
