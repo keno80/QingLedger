@@ -59,6 +59,7 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
 
     fun changeMonth(offset: Long) { selection.update { it.copy(month = it.month.plusMonths(offset), limit = 50) } }
     fun search(value: String) { selection.update { it.copy(query = value, limit = 50) } }
+    fun resetSearch(month: YearMonth) { selection.value = LedgerSelection(month = month) }
     fun filter(kind: TransactionKind?) { selection.update { it.copy(kind = kind, categoryId = null, limit = 50) } }
     fun filterCategory(id: String?) { selection.update { it.copy(categoryId = id, limit = 50) } }
     fun filterAccount(id: String?) { selection.update { it.copy(accountId = id, limit = 50) } }

@@ -38,11 +38,12 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, capture: CaptureViewModel) {
+fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, capture: CaptureViewModel) {
     var savedRoute by rememberSaveable { mutableStateOf(AppRoute.LEDGER.name) }
     val route = AppRoute.fromSavedValue(savedRoute)
     val stateHolder = rememberSaveableStateHolder()
     val state by ledger.state.collectAsStateWithLifecycle()
+    val searchState by searchLedger.state.collectAsStateWithLifecycle()
     val message by ledger.message.collectAsStateWithLifecycle()
     val busy by ledger.busy.collectAsStateWithLifecycle()
     val captureBusy by capture.busy.collectAsStateWithLifecycle()
@@ -52,16 +53,18 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var session by rememberSaveable { mutableStateOf(0) }
     var referenceParent by rememberSaveable { mutableStateOf("list") }
+    var transactionParent by rememberSaveable { mutableStateOf("list") }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
         value = true to null
         value = if (selectedId == null) false to null else try { false to ledger.get(selectedId!!) } catch (_: Exception) { false to null }
     }
     fun closePage() {
-        if (screen != "list") stateHolder.removeState("$screen-$selectedId-$session")
-        screen = when (screen) { "candidate" -> "automation"; "automation" -> "preferences"; "categories", "accounts" -> referenceParent; else -> "list" }
+        if (screen != "list") stateHolder.removeState(if (screen == "search") "ledger-search" else "$screen-$selectedId-$session")
+        screen = when (screen) { "candidate" -> "automation"; "automation" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
         selectedId = null
     }
-    fun openEditor(id: String?) { selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
+    fun openEditor(id: String?) { if (id == null) transactionParent = "list"; selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
+    fun openTransaction(id: String, parent: String) { transactionParent = parent; selectedId = id; session++; screen = "detail"; ledger.clearMessage() }
 
     BackHandler(enabled = screen != "list" || route != AppRoute.LEDGER) {
         if (!busy && !captureBusy) { if (screen != "list") closePage() else savedRoute = AppRoute.LEDGER.name }
@@ -83,7 +86,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     ) { insets ->
         val showBottomBar = screen == "list" && route != AppRoute.AUTOMATION
         Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding()) {
-        stateHolder.SaveableStateProvider(if (screen == "list") route.name else "$screen-$selectedId-$session") {
+        stateHolder.SaveableStateProvider(when (screen) { "list" -> route.name; "search" -> "ledger-search"; else -> "$screen-$selectedId-$session" }) {
             val pageState = rememberLazyListState()
             val pageScope = rememberCoroutineScope()
             LazyColumn(
@@ -91,17 +94,18 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 modifier = Modifier.fillMaxSize(),
                 // Scroll content behind the floating controls; only the final item needs clearance.
                 contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (showBottomBar) 132.dp else 16.dp),
-                verticalArrangement = Arrangement.spacedBy(if (screen == "list" && route == AppRoute.LEDGER) 0.dp else 16.dp),
+                verticalArrangement = Arrangement.spacedBy(if (screen == "search" || (screen == "list" && route == AppRoute.LEDGER)) 0.dp else 16.dp),
             ) {
                 if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
-                            Text(when (screen) { "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
+                            Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
                 when {
+                    screen == "search" -> ledgerSearchPage(searchState, searchLedger) { openTransaction(it, "search") }
                     screen == "candidate" -> item {
                         candidateRows.find { it.id == selectedId }?.let { CandidateScreen(it, state, capture, captureBusy, ::closePage) }
                             ?: Button(onClick = ::closePage) { Text("事件不可用，返回自动") }
@@ -121,7 +125,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         item("capture-controls") { AutomationScreen(capture) }
                         captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }
                     }
-                    route == AppRoute.LEDGER -> ledgerPage(state, ledger, { selectedId = it; session++; screen = "detail"; ledger.clearMessage() })
+                    route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
                     route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) }
                     else -> item { MyScreen({ referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
                 }

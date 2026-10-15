@@ -26,13 +26,14 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, onOpen: (String) -> Unit) {
+fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, onSearch: () -> Unit, onOpen: (String) -> Unit) {
     item("ledger-header") {
         Row(Modifier.fillMaxWidth().padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("账本", Modifier.weight(1f), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = { viewModel.changeMonth(-1) }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "上月", modifier = Modifier.size(18.dp)) }
             Text("${state.selection.month.year}年${state.selection.month.monthValue}月", fontSize = 14.sp)
             IconButton(onClick = { viewModel.changeMonth(1) }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Next, "下月", modifier = Modifier.size(18.dp)) }
+            IconButton(onClick = onSearch, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Search, "搜索账单", modifier = Modifier.size(22.dp)) }
         }
     }
     item("overview") {
@@ -57,9 +58,28 @@ fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, o
             }
         }
     }
-    item("search") { LedgerSearchAndFilters(state, viewModel) }
+    item("filters") {
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("账单明细", Modifier.weight(1f), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            LedgerFilterButton(state, viewModel)
+        }
+    }
+    ledgerRows(state, viewModel, onOpen)
+}
+
+fun LazyListScope.ledgerSearchPage(state: LedgerUiState, viewModel: LedgerViewModel, onOpen: (String) -> Unit) {
+    item("search") {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LedgerSearchField(state, viewModel)
+            Text("搜索范围：${state.selection.month.year}年${state.selection.month.monthValue}月", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
+    }
+    ledgerRows(state, viewModel, onOpen)
+}
+
+private fun LazyListScope.ledgerRows(state: LedgerUiState, viewModel: LedgerViewModel, onOpen: (String) -> Unit) {
     if (state.loading) item("loading") { StatusCard("正在打开账本", "请稍候。") }
-    else if (state.rows.isEmpty()) item("empty") { StatusCard("暂无账单", "点击底部加号记一笔，或调整月份和筛选条件。") }
+    else if (state.rows.isEmpty()) item("empty") { StatusCard("暂无账单", "可调整关键词、月份或筛选条件。") }
     val zone = ZoneId.of(state.zoneId)
     val today = LocalDate.now(zone)
     state.rows.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() }.forEach { (date, rows) ->
@@ -77,23 +97,28 @@ fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, o
 }
 
 @Composable
-private fun LedgerSearchAndFilters(state: LedgerUiState, viewModel: LedgerViewModel) {
-    var showFilters by rememberSaveable { mutableStateOf(false) }
+private fun LedgerSearchField(state: LedgerUiState, viewModel: LedgerViewModel) {
     var query by rememberSaveable { mutableStateOf(state.selection.query) }
     var awaitingQuery by remember { mutableStateOf(false) }
     LaunchedEffect(state.selection.query) {
         if (state.selection.query == query) awaitingQuery = false
         else if (!awaitingQuery) query = state.selection.query
     }
-    val filtered = state.selection.kind != null || state.selection.categoryId != null || state.selection.accountId != null
-    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(value = query, onValueChange = { query = it; awaitingQuery = true; viewModel.search(it) }, label = "搜索商户、备注", singleLine = true,
             modifier = Modifier.weight(1f), cornerRadius = 14.dp,
             textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
             leadingIcon = { Icon(LedgerIcons.Search, null, modifier = Modifier.padding(end = 8.dp).size(18.dp)) })
-        IconButton(onClick = { showFilters = true }, modifier = Modifier.size(48.dp)) {
+        LedgerFilterButton(state, viewModel)
+    }
+}
+
+@Composable
+private fun LedgerFilterButton(state: LedgerUiState, viewModel: LedgerViewModel) {
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    val filtered = state.selection.kind != null || state.selection.categoryId != null || state.selection.accountId != null
+    IconButton(onClick = { showFilters = true }, modifier = Modifier.size(48.dp)) {
             Icon(LedgerIcons.Filter, if (filtered) "筛选账单，已设置" else "筛选账单", tint = if (filtered) LedgerColors.accentContent else MiuixTheme.colorScheme.onBackground, modifier = Modifier.size(22.dp))
-        }
     }
     OverlayBottomSheet(show = showFilters, title = "筛选账单", onDismissRequest = { showFilters = false }) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {

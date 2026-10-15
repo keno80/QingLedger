@@ -36,8 +36,9 @@ class MainActivity : ComponentActivity() {
             }
             LedgerTheme(darkTheme = dark) {
                 val ledger: LedgerViewModel = viewModel(factory = LedgerViewModel.Factory(container.ledgerRepository))
+                val searchLedger: LedgerViewModel = viewModel(key = "ledger-search", factory = LedgerViewModel.Factory(container.ledgerRepository))
                 val capture: CaptureViewModel = viewModel(factory = CaptureViewModel.Factory(container.captureRepository, container.captureRuntime))
-                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, capture = capture)
+                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, searchLedger = searchLedger, capture = capture)
             }
         }
     }

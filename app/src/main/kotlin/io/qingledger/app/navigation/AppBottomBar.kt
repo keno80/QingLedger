@@ -40,7 +40,7 @@ internal fun AppBottomBar(route: AppRoute, onSelect: (AppRoute) -> Unit, onAdd: 
             }
         }
         // Miuix 0.9.4 always reserves 36.dp below its floating bar. Match the sibling's baseline.
-        if (route == AppRoute.LEDGER) Box(Modifier.padding(bottom = 36.dp)) {
+        Box(Modifier.padding(bottom = 36.dp)) {
             FloatingActionButton(
                 onClick = onAdd,
                 // Match FloatingNavigationBar's soft shadow in miuix 0.9.4;
