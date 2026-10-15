@@ -80,21 +80,17 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 }
             }
         },
-        bottomBar = {
-            if (screen == "list" && route != AppRoute.AUTOMATION) AppBottomBar(
-                route = route,
-                onSelect = { savedRoute = it.name },
-                onAdd = { if (!state.loading && !busy) openEditor(null) },
-            )
-        },
     ) { insets ->
+        val showBottomBar = screen == "list" && route != AppRoute.AUTOMATION
+        Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding()) {
         stateHolder.SaveableStateProvider(if (screen == "list") route.name else "$screen-$selectedId-$session") {
             val pageState = rememberLazyListState()
             val pageScope = rememberCoroutineScope()
             LazyColumn(
                 state = pageState,
-                modifier = Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxSize(),
+                // Scroll content behind the floating controls; only the final item needs clearance.
+                contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (showBottomBar) 132.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(if (screen == "list" && route == AppRoute.LEDGER) 0.dp else 16.dp),
             ) {
                 if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
@@ -130,6 +126,14 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     else -> item { MyScreen({ referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
                 }
             }
+        }
+        if (showBottomBar) Box(Modifier.align(Alignment.BottomCenter)) {
+            AppBottomBar(
+                route = route,
+                onSelect = { savedRoute = it.name },
+                onAdd = { if (!state.loading && !busy) openEditor(null) },
+            )
+        }
         }
     }
 }

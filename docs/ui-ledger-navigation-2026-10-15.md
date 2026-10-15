@@ -1,11 +1,20 @@
 # 底栏与账本样式落地
 
-日期：2026-10-15。版本：0.7.0（versionCode 12）。基于已确认的薄荷绿设计稿，本阶段落地底部导航和账本首页。
+日期：2026-10-15。当前版本：0.7.1（versionCode 13）。基于已确认的薄荷绿设计稿，本阶段落地底部导航和账本首页。
+
+## 0.7.1 悬浮布局修正
+
+- 0.7.0 错误地把操作栏放在 Scaffold.bottomBar，并给列表应用完整底部 inset，列表可见区域被截短。原验收只检查末行能否露出，遗漏了列表必须从控件背后滚过这一要求。
+- 改为内容 Box 内的底部叠层；列表占满可用区域，操作栏周围无整条背景。末尾 132 dp contentPadding 随内容滚动，最后一笔可以完整滚到控件上方。
+- 导航保留 miuix FloatingNavigationBar 默认 surfaceContainer；圆形按钮继续使用 miuix FloatingActionButton，调整为与导航同高的 52 dp、同底色、薄荷绿加号。
+- miuix 0.9.4 导航使用半径 10 dp、透明度 0.2 的柔和 dropShadow，FAB 默认是 elevation 阴影。按钮关闭默认 elevation，使用相同 dropShadow 参数，避免两套阴影并排不协调。
+- Debug 构建通过并覆盖安装；真机截图确认列表从控件背后延伸、末行完整露出、圆形按钮打开新增页、二级页隐藏底栏、统计切换及返回。当前进程无 AndroidRuntime 错误。截图保存在 debug-artifacts/ui-071-*.png。
+- 本轮为布局修正，未重跑领域测试；没有新增或修改账单。
 
 ## 已完成
 
 - 底栏仅保留账本、统计、我的；使用 miuix FloatingNavigationBar / FloatingNavigationBarItem，不自行绘制导航交互。
-- 账本旁的独立记账按钮使用 miuix FloatingActionButton，CircleShape、56 dp，和导航保持 12 dp 间距；只在账本首页出现，二级页隐藏底栏。
+- 账本旁的独立记账按钮使用 miuix FloatingActionButton，CircleShape、52 dp，和导航保持 12 dp 间距；只在账本首页出现，二级页隐藏底栏。
 - miuix 0.9.4 的导航有外层占满宽度和内部底部留白，使用受限容器及相同基线留白适配，避免按钮被挤出或上下错位。
 - 全局 miuix 主色改为薄荷绿；浅深色的支出、收入、强调底和强调文字使用对应语义颜色。
 - 账本标题、月份箭头、本月概览、单一搜索框、筛选按钮和按天分组流水。每行优先展示标题、金额、分类、账户、时间与来源；完整备注保留在详情页。

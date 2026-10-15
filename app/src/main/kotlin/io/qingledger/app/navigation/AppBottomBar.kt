@@ -5,6 +5,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.unit.dp
 import io.qingledger.designsystem.component.LedgerIcons
 import io.qingledger.designsystem.theme.LedgerColors
@@ -20,7 +23,7 @@ internal fun AppBottomBar(route: AppRoute, onSelect: (AppRoute) -> Unit, onAdd: 
     ) {
         // Constrain the native component's outer full-width box, not its inner modifier.
         Box(Modifier.width(204.dp)) {
-            FloatingNavigationBar(horizontalOutSidePadding = 0.dp, defaultWindowInsetsPadding = false, color = MiuixTheme.colorScheme.surface) {
+            FloatingNavigationBar(horizontalOutSidePadding = 0.dp, defaultWindowInsetsPadding = false) {
                 listOf(AppRoute.LEDGER, AppRoute.STATISTICS, AppRoute.SETTINGS).forEach { item ->
                     FloatingNavigationBarItem(
                         selected = route == item,
@@ -38,8 +41,18 @@ internal fun AppBottomBar(route: AppRoute, onSelect: (AppRoute) -> Unit, onAdd: 
         }
         // Miuix 0.9.4 always reserves 36.dp below its floating bar. Match the sibling's baseline.
         if (route == AppRoute.LEDGER) Box(Modifier.padding(bottom = 36.dp)) {
-            FloatingActionButton(onClick = onAdd, shape = CircleShape, minWidth = 56.dp, minHeight = 56.dp) {
-                Icon(LedgerIcons.Add, "记一笔", tint = MiuixTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
+            FloatingActionButton(
+                onClick = onAdd,
+                // Match FloatingNavigationBar's soft shadow in miuix 0.9.4;
+                // FAB's elevation otherwise uses a different, directional shadow.
+                modifier = Modifier.dropShadow(CircleShape, Shadow(radius = 10.dp, color = Color.Black, alpha = 0.2f)),
+                shape = CircleShape,
+                containerColor = MiuixTheme.colorScheme.surfaceContainer,
+                shadowElevation = 0.dp,
+                minWidth = 52.dp,
+                minHeight = 52.dp,
+            ) {
+                Icon(LedgerIcons.Add, "记一笔", tint = LedgerColors.accentContent, modifier = Modifier.size(28.dp))
             }
         }
     }
