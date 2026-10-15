@@ -58,12 +58,6 @@ fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, o
             }
         }
     }
-    item("filters") {
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("账单明细", Modifier.weight(1f), fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            LedgerFilterButton(state, viewModel)
-        }
-    }
     ledgerRows(state, viewModel, onOpen)
 }
 
@@ -82,13 +76,19 @@ private fun LazyListScope.ledgerRows(state: LedgerUiState, viewModel: LedgerView
     else if (state.rows.isEmpty()) item("empty") { StatusCard("暂无账单", "可调整关键词、月份或筛选条件。") }
     val zone = ZoneId.of(state.zoneId)
     val today = LocalDate.now(zone)
-    state.rows.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() }.forEach { (date, rows) ->
+    val grouped = state.rows.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() }
+    grouped.forEach { (date, rows) ->
         item("day-$date") {
             Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 val prefix = when (date) { today -> "今天 · "; today.minusDays(1) -> "昨天 · "; else -> "" }
                 Text(prefix + date.format(DateTimeFormatter.ofPattern("M月d日")), Modifier.weight(1f), fontSize = 12.sp)
-                // Filters and pagination can produce partial days, so do not imply a full daily total.
-                Text("${rows.size}笔", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                val possiblyPartial = state.rows.size >= state.selection.limit && date == grouped.keys.last()
+                // Summarize this result group; mark a potentially unfinished paginated day.
+                FlowRow(Modifier.weight(1.8f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text((if (possiblyPartial) "已加载" else "") + "${rows.size}笔", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                    Text("收 ${formatMoney(rows.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amountMinor })}", fontSize = 11.sp, color = LedgerColors.income)
+                    Text("支 ${formatMoney(rows.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amountMinor })}", fontSize = 11.sp, color = LedgerColors.expense)
+                }
             }
         }
         itemsIndexed(rows, key = { _, row -> row.id }) { index, row -> LedgerCompactRow(row, state, index == 0, index == rows.lastIndex) { onOpen(row.id) } }
