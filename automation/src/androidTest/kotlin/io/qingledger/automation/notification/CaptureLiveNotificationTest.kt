@@ -27,4 +27,14 @@ class CaptureLiveNotificationTest {
         assertEquals("识别完成 · 已入账", notice.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         assertEquals(Notification.VISIBILITY_PRIVATE, notice.visibility)
     }
+    @Test fun completionFeedbackShowsActualResultInCapsule() {
+        if (Build.VERSION.SDK_INT < 36) return
+        val notice = notices.resultNotification("AUTO_POSTED", promoted = true)
+        assertTrue(notice.flags and Notification.FLAG_ONGOING_EVENT != 0)
+        assertTrue(notice.extras.getBoolean("android.requestPromotedOngoing"))
+        assertEquals("已入账", notice.shortCriticalText)
+        assertEquals("识别完成 · 已入账", notice.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertTrue(notice.hasPromotableCharacteristics())
+        assertEquals(5_000L, notice.timeoutAfter)
+    }
 }

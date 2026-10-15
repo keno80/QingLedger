@@ -8,38 +8,79 @@ import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import io.qingledger.domain.model.CaptureNotice
 
 /** One notification is updated in place; notification failures must never prevent bookkeeping. */
-class CaptureLiveNotification(private val context: Context) {
+class CaptureLiveNotification(private val context: Context, private val notificationId: Int = ID) {
     private val manager = context.getSystemService(NotificationManager::class.java)
+    private val handler = Handler(Looper.getMainLooper())
+    private var revision = 0L
+    private var pendingCompletion: Runnable? = null
     fun notificationsEnabled(): Boolean = manager.areNotificationsEnabled()
     fun promotionAllowed(): Boolean = Build.VERSION.SDK_INT >= 36 && manager.canPostPromotedNotifications()
 
-    fun started() = safely {
-        manager.notify(ID, progressNotification())
+    @Synchronized fun started(diagnostic: Boolean = false) = safely {
+        clearPendingCompletion()
+        manager.notify(notificationId, progressNotification(diagnostic))
     }
 
-    internal fun progressNotification(): Notification {
-        val builder = base("正在识别交易", "正在识别并保存账单，请稍候。")
+    internal fun progressNotification(diagnostic: Boolean = false): Notification {
+        val builder = if (diagnostic) base("实时更新展示自检", "Debug 测试通知，8秒后结束，不生成账单。")
+            else base("正在识别交易", "正在识别并保存账单，请稍候。")
+        builder
             .setOngoing(true)
             .setProgress(0, 0, true)
             .setTimeoutAfter(15_000)
-        if (Build.VERSION.SDK_INT >= 36) builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }).setShortCriticalText("识别中")
+        if (Build.VERSION.SDK_INT >= 36) builder.addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) }).setShortCriticalText(if (diagnostic) "自检" else "识别中")
         return builder.build()
     }
 
-    fun finished(state: String?) = safely {
-        manager.notify(ID, resultNotification(state))
+    @Synchronized fun finished(state: String?) = safely {
+        clearPendingCompletion()
+        val promoted = promotionAllowed()
+        manager.notify(notificationId, resultNotification(state, promoted))
+        if (promoted) {
+            val expectedRevision = revision
+            val completion = Runnable {
+                synchronized(this) {
+                    if (revision == expectedRevision) {
+                        pendingCompletion = null
+                        safely {
+                            // Respect dismissal; never resurrect a notice removed by the user.
+                            if (manager.activeNotifications.any { it.id == notificationId && it.tag == null })
+                                manager.notify(notificationId, resultNotification(state))
+                        }
+                    }
+                }
+            }
+            pendingCompletion = completion
+            handler.postDelayed(completion, 4_000)
+        }
     }
 
-    internal fun resultNotification(state: String?): Notification {
+    internal fun resultNotification(state: String?, promoted: Boolean = false): Notification {
         val notice = CaptureNotice.fromState(state)
-        return base(notice.title, notice.description)
-            .setOngoing(false).setAutoCancel(true).setTimeoutAfter(30_000).build()
+        val builder = base(notice.title, notice.description)
+            .setOngoing(promoted).setAutoCancel(!promoted).setTimeoutAfter(if (promoted) 5_000 else 30_000)
+        if (Build.VERSION.SDK_INT >= 36 && promoted) builder
+            .addExtras(Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
+            .setShortCriticalText(when (state) {
+                "AUTO_POSTED", "CONFIRMED" -> "已入账"
+                "MERGED" -> "已关联"
+                "SKIPPED", "IGNORED" -> "已跳过"
+                else -> "未完成"
+            })
+        return builder.build()
     }
 
-    fun cancel() = safely { manager.cancel(ID) }
+    @Synchronized fun cancel() = safely { clearPendingCompletion(); manager.cancel(notificationId) }
+    private fun clearPendingCompletion() {
+        revision++
+        pendingCompletion?.let(handler::removeCallbacks)
+        pendingCompletion = null
+    }
 
     private fun base(title: String, text: String): Notification.Builder {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "自动记账进度与结果", NotificationManager.IMPORTANCE_DEFAULT).apply {

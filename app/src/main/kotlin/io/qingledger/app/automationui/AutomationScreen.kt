@@ -76,7 +76,7 @@ fun AutomationScreen(capture: CaptureViewModel) {
         StatusCard(title, "识别到明确金额和收支方向后直接入账，无需确认；不准确时可在账单中编辑或删除。金额或方向不明确的通知将跳过。")
         SettingsGroup("识别通知") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (!noticesEnabled) "通知未开启：识别仍正常运行，但无法显示进度和结果。" else "识别中显示进度，完成后更新同一条通知，30秒后自动收起。")
+                Text(if (!noticesEnabled) "通知未开启：识别仍正常运行，但无法显示进度和结果。" else "识别中显示进度；支持实时更新时，结果胶囊保留4秒，再转为普通通知，30秒后自动收起。")
                 Text(if (Build.VERSION.SDK_INT < 36) "当前系统使用普通进度通知。" else if (promotionAllowed) "已允许实时更新，具体展示形式由系统决定。" else "实时更新未允许，使用普通通知。")
                 Button(onClick = {
                     if (Build.VERSION.SDK_INT >= 33 && !noticesEnabled) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
