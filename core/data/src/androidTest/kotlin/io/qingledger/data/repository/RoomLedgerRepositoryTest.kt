@@ -24,6 +24,19 @@ class RoomLedgerRepositoryTest {
     }
     @After fun teardown() { database.close() }
 
+    @Test fun statisticsReadsWholeMonthAndExcludesDeletedAndOutsidePeriod() = runBlocking {
+        repeat(101) { repository.save(TransactionDraft(TransactionKind.EXPENSE, 100, now, categoryId = "expense-0")) }
+        val deleted = repository.save(TransactionDraft(TransactionKind.EXPENSE, 500, now))
+        repository.delete(deleted, 0)
+        repository.save(TransactionDraft(TransactionKind.EXPENSE, 900, period.end))
+        repository.save(TransactionDraft(TransactionKind.EXPENSE, 900, period.start - 1))
+        repository.save(TransactionDraft(TransactionKind.REFUND, 200, now, categoryId = "expense-0"))
+        val rows = repository.monthlyTransactions(period).first()
+        assertEquals(102, rows.size)
+        assertEquals(9900L, StatisticsRules.categories(rows).single().amountMinor)
+        assertEquals(repository.summary(period).first(), LedgerRules.summarize(rows))
+    }
+
     @Test fun deletionAndUndoChangeSummaryAtomically() = runBlocking {
         val id = repository.save(TransactionDraft(TransactionKind.EXPENSE, 1234, now))
         assertEquals(1234L, repository.summary(period).first().expense)

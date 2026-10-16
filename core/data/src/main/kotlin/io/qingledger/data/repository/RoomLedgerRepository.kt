@@ -29,6 +29,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
     }
     override fun transactions(filter: LedgerFilter) = dao.transactions(filter.period.start, filter.period.end, filter.query, filter.kind?.name, filter.categoryId, filter.accountId, filter.limit.coerceIn(1, 10000)).map { rows -> rows.map { it.domain() } }
     override fun summary(period: PeriodRange) = dao.summary(period.start, period.end).map { LedgerSummary(it.income, it.expense) }
+    override fun monthlyTransactions(period: PeriodRange) = dao.monthlyTransactions(period.start, period.end).map { rows -> rows.map { it.domain() } }
     override fun overview(zoneId: String) = dao.recordedTimes().map { times ->
         val zone = ZoneId.of(zoneId)
         LedgerOverview(times.size, times.map { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }.toSet().size)

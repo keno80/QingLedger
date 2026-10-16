@@ -136,7 +136,7 @@ private fun LedgerFilterButton(state: LedgerUiState, viewModel: LedgerViewModel)
 }
 
 @Composable
-private fun LedgerCompactRow(row: LedgerTransaction, state: LedgerUiState, first: Boolean, last: Boolean, onOpen: () -> Unit) {
+internal fun LedgerCompactRow(row: LedgerTransaction, state: LedgerUiState, first: Boolean, last: Boolean, onOpen: () -> Unit) {
     val category = state.categories.find { it.id == row.categoryId }?.name ?: "未分类"
     fun account(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
     val accounts = if (row.kind == TransactionKind.TRANSFER) "${account(row.fromAccountId)} → ${account(row.toAccountId)}" else account(row.accountId)
