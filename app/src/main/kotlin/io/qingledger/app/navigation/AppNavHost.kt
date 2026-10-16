@@ -148,7 +148,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         { accountToEdit = it; referenceParent = "assets"; session++; screen = "accounts" }) }
                     screen == "preferences" -> item { SettingsScreen(capture, { session++; screen = "automation" }, { session++; screen = "appearance" }) }
                     screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
-                    screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy || importState.busy) { csvImport.reset(); session++; screen = "csvimport" } }
+                    screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy || importState.busy) { source -> csvImport.reset(source); session++; screen = "csvimport" } }
                     screen == "csvimport" -> csvImportPage(importState, csvImport)
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture) }

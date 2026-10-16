@@ -31,7 +31,7 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
         .format(DateTimeFormatter.ofPattern(if (seconds) "yyyy-MM-dd HH:mm:ss" else "yyyy年M月d日 HH:mm"))
     val amountColor = when (row.kind) {
         TransactionKind.EXPENSE -> LedgerColors.expense
-        TransactionKind.INCOME -> LedgerColors.income
+        TransactionKind.INCOME, TransactionKind.REFUND -> LedgerColors.income
         TransactionKind.TRANSFER -> MiuixTheme.colorScheme.onSurface
     }
     val source = row.sourcePackage?.let { io.qingledger.app.automationui.sourceLabel(it) } ?: "手动记账"
@@ -43,12 +43,13 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
                 }
                 Text(row.merchant.ifBlank { if (row.kind == TransactionKind.TRANSFER) "账户转账" else category }, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Text(row.kind.label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = amountColor)
-                Text(if (row.sourcePackage == null) "手动记账" else "自动记账 · $source", fontSize = 12.sp, color = LedgerColors.accentContent)
+                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME, TransactionKind.REFUND -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = amountColor)
+                Text(if (row.kind == TransactionKind.REFUND) "冲减支出" else if (history.any { it.operation == "IMPORT_CSV" }) "账单导入 · $source" else if (row.sourcePackage == null) "手动记账" else "自动记账 · $source", fontSize = 12.sp, color = LedgerColors.accentContent)
             }
         }
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(horizontal = 20.dp, vertical = 8.dp)) {
             if (row.kind != TransactionKind.TRANSFER) DetailField("分类", category)
+            if (row.kind == TransactionKind.REFUND) DetailField("关联支出", if (row.originalExpenseId == null) "未关联" else state.rows.find { it.id == row.originalExpenseId }?.let { "${it.merchant.ifBlank { "支出" }} · ${formatMoney(it.amountMinor)}" } ?: "已关联原支出")
             if (row.kind == TransactionKind.TRANSFER) {
                 DetailField("转出账户", account(row.fromAccountId))
                 DetailField("转入账户", account(row.toAccountId))

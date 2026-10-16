@@ -4,7 +4,10 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.math.BigDecimal
 
-enum class TransactionKind(val label: String) { EXPENSE("支出"), INCOME("收入"), TRANSFER("转账") }
+enum class TransactionKind(val label: String) {
+    EXPENSE("支出"), INCOME("收入"), TRANSFER("转账"), REFUND("退款");
+    val categoryKind: TransactionKind get() = if (this == REFUND) EXPENSE else this
+}
 data class Category(val id: String, val name: String, val kind: TransactionKind, val archived: Boolean = false)
 data class Account(val id: String, val name: String, val archived: Boolean = false, val openingBalanceMinor: Long? = null)
 data class LedgerTransaction(
@@ -21,6 +24,7 @@ data class LedgerTransaction(
     val revision: Int,
     val zoneId: String,
     val sourcePackage: String? = null,
+    val originalExpenseId: String? = null,
 )
 data class TransactionDraft(
     val kind: TransactionKind,
@@ -32,6 +36,7 @@ data class TransactionDraft(
     val fromAccountId: String? = null,
     val toAccountId: String? = null,
     val note: String = "",
+    val originalExpenseId: String? = null,
 )
 data class PeriodRange(val start: Long, val end: Long)
 data class LedgerSummary(val income: Long = 0, val expense: Long = 0) {
@@ -54,6 +59,7 @@ object LedgerRules {
         draft.amountMinor !in 1..MAX_AMOUNT -> "金额需大于 0 且不超过 9999999999.99 元。"
         draft.merchant.length > 128 -> "商户名称最多 128 个字符。"
         draft.note.length > 500 -> "备注最多 500 个字符。"
+        draft.kind != TransactionKind.REFUND && draft.originalExpenseId != null -> "只有退款可以关联原支出。"
         draft.kind == TransactionKind.TRANSFER && (draft.fromAccountId == null || draft.toAccountId == null) -> "请选择转出和转入账户。"
         draft.kind == TransactionKind.TRANSFER && draft.fromAccountId == draft.toAccountId -> "转出和转入账户不能相同。"
         draft.kind == TransactionKind.TRANSFER && (draft.accountId != null || draft.categoryId != null) -> "转账不能同时指定收支账户或分类。"
@@ -67,6 +73,7 @@ object LedgerRules {
             when (it.kind) {
                 TransactionKind.INCOME -> income = Math.addExact(income, it.amountMinor)
                 TransactionKind.EXPENSE -> expense = Math.addExact(expense, it.amountMinor)
+                TransactionKind.REFUND -> expense = Math.subtractExact(expense, it.amountMinor)
                 TransactionKind.TRANSFER -> Unit
             }
         }

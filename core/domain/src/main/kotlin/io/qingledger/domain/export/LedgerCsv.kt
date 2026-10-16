@@ -39,6 +39,7 @@ data class LedgerCsvRow(
     val id: String, val kind: TransactionKind, val amountMinor: Long, val occurredAt: Long,
     val zoneId: String, val currency: String, val category: String, val account: String,
     val fromAccount: String, val toAccount: String, val merchant: String, val note: String, val sourcePackage: String,
+    val originalExpenseId: String = "",
 )
 
 interface CsvExportRepository {
@@ -48,7 +49,8 @@ interface CsvExportRepository {
 
 object LedgerCsv {
     val baseHeaders = listOf("账单ID", "交易时间", "时区", "收支类型", "金额（元）", "币种", "分类", "资金账户", "转出账户", "转入账户", "商户", "备注", "来源应用")
-    val headers = baseHeaders + "文本转义"
+    val v2Headers = baseHeaders + "文本转义"
+    val headers = baseHeaders + listOf("原支出ID", "文本转义")
 
     fun write(writer: Writer, rows: Iterable<LedgerCsvRow>) {
         writer.write("\uFEFF")
@@ -56,9 +58,9 @@ object LedgerCsv {
         rows.forEach { row ->
             val time = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(Instant.ofEpochMilli(row.occurredAt).atZone(ZoneId.of(row.zoneId)))
             val values = listOf(row.id, time, row.zoneId, row.kind.label, BigDecimal.valueOf(row.amountMinor, 2).toPlainString(),
-                row.currency, row.category, row.account, row.fromAccount, row.toAccount, row.merchant, row.note, row.sourcePackage)
+                row.currency, row.category, row.account, row.fromAccount, row.toAccount, row.merchant, row.note, row.sourcePackage, row.originalExpenseId)
             val protected = values.mapIndexedNotNull { index, value -> index.takeIf { needsProtection(value) } }.joinToString(";")
-            writeRow(writer, values + "v2:$protected")
+            writeRow(writer, values + "v3:$protected")
         }
     }
 

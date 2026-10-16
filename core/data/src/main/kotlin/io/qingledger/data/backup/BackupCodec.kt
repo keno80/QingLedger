@@ -27,7 +27,7 @@ internal object BackupCodec {
             }))
         }
         val json = payload.put("tables", tables).toString()
-        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 3)
+        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 4)
             .put("createdAt", snapshot.createdAt).put("sha256", digest(json)).put("payload", json).toString().toByteArray(Charsets.UTF_8)
             .also { require(it.size <= BackupRepository.MAX_BYTES) { "备份超过 16MB，当前版本暂不支持。" } }
     }
@@ -36,7 +36,8 @@ internal object BackupCodec {
         require(bytes.isNotEmpty() && bytes.size <= BackupRepository.MAX_BYTES) { "备份文件为空或超过 16MB。" }
         try {
             val envelope = parse(String(bytes, Charsets.UTF_8))
-            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && exactInteger(envelope.get("databaseVersion"), 3)) { "备份格式或数据库版本不支持。" }
+            val legacy = exactInteger(envelope.get("databaseVersion"), 3)
+            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && (legacy || exactInteger(envelope.get("databaseVersion"), 4))) { "备份格式或数据库版本不支持。" }
             val payload = envelope.get("payload") as? String ?: error("Invalid payload")
             require(envelope.getString("sha256") == digest(payload)) { "备份校验失败，文件可能已损坏。" }
             val root = parse(payload)
@@ -48,14 +49,15 @@ internal object BackupCodec {
                 val table = input.getJSONObject(name)
                 val columns = expected.getValue(name)
                 val names = table.getJSONArray("columns")
-                require((0 until names.length()).map { names.getString(it) } == columns.map { it.name }) { "备份字段不匹配。" }
+                val inputColumns = if (legacy && name == "transactions") columns.filter { it.name != "originalExpenseId" } else columns
+                require((0 until names.length()).map { names.getString(it) } == inputColumns.map { it.name }) { "备份字段不匹配。" }
                 val rows = table.getJSONArray("rows")
                 count += rows.length()
                 require(count <= 200000) { "备份记录过多，当前版本暂不支持。" }
                 BackupTable(columns, (0 until rows.length()).map { index ->
                     val row = rows.getJSONArray(index)
-                    require(row.length() == columns.size) { "备份记录字段不完整。" }
-                    columns.mapIndexed { position, column ->
+                    require(row.length() == inputColumns.size) { "备份记录字段不完整。" }
+                    val values = inputColumns.mapIndexed { position, column ->
                         val value = row.get(position)
                         when {
                             value == JSONObject.NULL -> { require(column.nullable) { "备份必要字段为空。" }; null }
@@ -63,6 +65,7 @@ internal object BackupCodec {
                             else -> { require(value is String && value.length <= 65536) { "备份文字格式无效。" }; value }
                         }
                     }
+                    if (inputColumns.size != columns.size) values + null else values
                 })
             }
             val createdAt = envelope.get("createdAt")

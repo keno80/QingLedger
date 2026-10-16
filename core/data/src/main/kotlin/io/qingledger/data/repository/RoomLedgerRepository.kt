@@ -38,7 +38,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
 
     override suspend fun saveCategory(name: String, kind: TransactionKind, id: String?): String = database.withTransaction {
         val normalized = ReferenceRules.normalizeName(name) ?: throw IllegalArgumentException("名称需为 1–32 个字符，不能包含换行或控制字符。")
-        require(kind != TransactionKind.TRANSFER) { "分类只能用于收入或支出。" }
+        require(kind in setOf(TransactionKind.EXPENSE, TransactionKind.INCOME)) { "分类只能用于收入或支出。" }
         val previous = id?.let { dao.category(it) ?: throw IllegalArgumentException("分类不存在。") }
         require(previous == null || (!previous.archived && previous.kind == kind.name)) { "不能修改归档分类或分类收支类型。" }
         require(dao.allCategories().none { it.id != id && it.kind == kind.name && it.name.equals(normalized, ignoreCase = true) }) { "同类分类名称已存在；已归档分类可直接恢复。" }
@@ -70,7 +70,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
         if (previous != null && (previous.revision != expectedRevision || previous.deletedAt != null)) throw LedgerConflict()
         draft.categoryId?.let { categoryId ->
             val category = dao.category(categoryId) ?: throw IllegalArgumentException("分类不存在。")
-            require(category.bookId == "default" && category.kind == draft.kind.name) { "分类与收支类型不匹配。" }
+            require(category.bookId == "default" && category.kind == draft.kind.categoryKind.name) { "分类与收支类型不匹配。" }
             require(!category.archived || categoryId == previous?.categoryId) { "分类已归档，请重新选择。" }
         }
         listOfNotNull(draft.accountId, draft.fromAccountId, draft.toAccountId).forEach { accountId ->
@@ -87,7 +87,9 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
             fromAccountId = draft.fromAccountId, toAccountId = draft.toAccountId, note = draft.note.trim(),
             revision = (previous?.revision ?: -1) + 1, createdAt = previous?.createdAt ?: now, updatedAt = now,
             sourcePackage = previous?.sourcePackage,
+            originalExpenseId = draft.originalExpenseId,
         )
+        validateRefunds(transaction)
         if (previous == null) dao.insert(transaction) else dao.update(transaction)
         val changed = if (previous == null) emptyList() else buildList {
             if (previous.amountMinor != transaction.amountMinor) add("金额")
@@ -97,6 +99,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
             if (previous.accountId != transaction.accountId || previous.fromAccountId != transaction.fromAccountId || previous.toAccountId != transaction.toAccountId) add("账户")
             if (previous.occurredAt != transaction.occurredAt) add("时间")
             if (previous.note != transaction.note) add("备注")
+            if (previous.originalExpenseId != transaction.originalExpenseId) add("退款关联")
         }
         val operation = if (previous == null) "CREATE" else if (changed.isEmpty()) "EDIT" else "EDIT:" + changed.joinToString("、")
         dao.log(EditEntity(UUID.randomUUID().toString(), transaction.id, transaction.revision, operation, now))
@@ -106,6 +109,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
     override suspend fun delete(id: String, expectedRevision: Int): UndoDeletion = database.withTransaction {
         val row = dao.get(id) ?: throw LedgerConflict()
         if (row.deletedAt != null || row.revision != expectedRevision) throw LedgerConflict()
+        require(dao.allTransactionsForBackup().none { it.deletedAt == null && it.originalExpenseId == id }) { "请先删除关联退款或解除退款关联，再删除原支出。" }
         val now = clock.millis()
         val revision = row.revision + 1
         dao.update(row.copy(deletedAt = now, updatedAt = now, revision = revision))
@@ -116,10 +120,15 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
         require(clock.millis() <= token.expiresAt) { "撤销时间已过。" }
         val row = dao.get(token.id) ?: throw LedgerConflict()
         if (row.deletedAt == null || row.revision != token.revision) throw LedgerConflict()
+        validateRefunds(row.copy(deletedAt = null))
         dao.update(row.copy(deletedAt = null, updatedAt = clock.millis(), revision = row.revision + 1))
         dao.log(EditEntity(UUID.randomUUID().toString(), row.id, row.revision + 1, "RESTORE", clock.millis()))
     }
     override suspend fun archiveCategory(id: String) = database.withTransaction { dao.archiveCategory(id) }
     override suspend fun archiveAccount(id: String) = database.withTransaction { dao.archiveAccount(id) }
-    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage)
+    private suspend fun validateRefunds(row: TransactionEntity) {
+        val live = dao.allTransactionsForBackup().filter { it.deletedAt == null && it.id != row.id } + row
+        RefundRules.validate(live.map { it.domain() })?.let { throw IllegalArgumentException(it) }
+    }
+    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId)
 }

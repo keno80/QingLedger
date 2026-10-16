@@ -21,6 +21,6 @@ fun StatisticsScreen(state: LedgerUiState, viewModel: LedgerViewModel) {
                 SettingsDescription("本月结余", formatMoney(state.summary.balance))
             }
         }
-        StatusCard("统计口径", "统计当前月份的全部已入账记录，不受首页搜索、分类或账户筛选影响。转账不计入收支。")
+        StatusCard("统计口径", "统计当前月份全部账单，转账不计入收支，退款按到账日期冲减支出。")
     }
 }

@@ -19,7 +19,7 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewModel, externalBusy: Boolean, onCsvImport: () -> Unit) {
+fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewModel, externalBusy: Boolean, onCsvImport: (io.qingledger.domain.importing.ImportSource) -> Unit) {
     val state by data.state.collectAsStateWithLifecycle()
     val captureMessage by capture.message.collectAsStateWithLifecycle()
     val enabled = !state.busy && !externalBusy
@@ -52,7 +52,7 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
             SettingsNavigationRow("数据清理", "按范围选择，操作前再次确认", LedgerIcons.Database, { info = "按范围清理暂未实现，不会删除账单。" }, enabled = enabled)
         }
         Text("数据操作集中到这里，首页不展示维护与调试按钮。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        Text("备份文件包含明文财务数据，请妥善保管；当前支持数据库版本 3，文件最大 16MB。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        Text("备份文件包含明文财务数据，请妥善保管；支持数据库版本 3 / 4，文件最大 16MB。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (state.busy) StatusCard("正在处理", "请等待完成后再离开。")
         (if (showCaptureMessage) captureMessage else state.message)?.let { StatusCard("数据管理提示", it) }
     }
@@ -66,9 +66,9 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
                     if (state.recoveryAvailable) Button(onClick = { export(true) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("导出最近恢复前备份") }
                 }
                 "import" -> SettingsSection {
-                    SettingsNavigationRow("微信支付", "选择导出的账单文件", LedgerIcons.Wallet, { info = "微信账单导入暂未实现。" })
-                    SettingsNavigationRow("支付宝", "选择导出的账单文件", LedgerIcons.Wallet, { info = "支付宝账单导入暂未实现。" })
-                    SettingsNavigationRow("轻账 CSV", "选择标准账单文件", LedgerIcons.Ledger, { panel = null; onCsvImport() })
+                    SettingsNavigationRow("微信支付", "XLSX / CSV 账单", LedgerIcons.Wallet, { panel = null; onCsvImport(io.qingledger.domain.importing.ImportSource.WECHAT) })
+                    SettingsNavigationRow("支付宝", "CSV 账单", LedgerIcons.Wallet, { panel = null; onCsvImport(io.qingledger.domain.importing.ImportSource.ALIPAY) })
+                    SettingsNavigationRow("轻账 CSV", "选择标准账单文件", LedgerIcons.Ledger, { panel = null; onCsvImport(io.qingledger.domain.importing.ImportSource.QINGLEDGER) })
                 }
                 else -> {
                     Text("只隐藏已入账、跳过或关联等已处理事件；账单与重复抑制信息仍保留。", fontSize = 14.sp)

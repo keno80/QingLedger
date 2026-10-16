@@ -11,7 +11,7 @@ object CsvImportParser {
         val lines = readRecords(text.removePrefix("\uFEFF"))
         require(lines.isNotEmpty()) { "CSV 文件没有表头。" }
         val header = lines.first().second
-        require(header == LedgerCsv.headers || header == LedgerCsv.baseHeaders) { "请选择轻账导出的 CSV 文件，表头不匹配。" }
+        require(header in listOf(LedgerCsv.headers, LedgerCsv.v2Headers, LedgerCsv.baseHeaders)) { "请选择轻账导出的 CSV 文件，表头不匹配。" }
         val legacy = header == LedgerCsv.baseHeaders
         val records = mutableListOf<CsvImportRecord>()
         val issues = mutableListOf<CsvImportIssue>()
@@ -21,9 +21,10 @@ object CsvImportParser {
                 val cells = original.toMutableList()
                 if (!legacy) {
                     val metadata = cells.last()
-                    require(metadata.startsWith("v2:")) { "文本转义标记无效。" }
-                    val positions = metadata.removePrefix("v2:").split(';').filter { it.isNotEmpty() }.map { it.toIntOrNull() ?: throw IllegalArgumentException("文本转义字段无效。") }
-                    require(positions.distinct().size == positions.size && positions.all { it in 0..12 }) { "文本转义字段无效。" }
+                    val version = if (header == LedgerCsv.headers) "v3:" else "v2:"
+                    require(metadata.startsWith(version)) { "文本转义标记无效。" }
+                    val positions = metadata.removePrefix(version).split(';').filter { it.isNotEmpty() }.map { it.toIntOrNull() ?: throw IllegalArgumentException("文本转义字段无效。") }
+                    require(positions.distinct().size == positions.size && positions.all { it in 0 until header.lastIndex }) { "文本转义字段无效。" }
                     positions.forEach { index ->
                         require(cells[index].startsWith("'") && LedgerCsv.needsProtection(cells[index].substring(1))) { "文本转义内容无效。" }
                         cells[index] = cells[index].substring(1)
@@ -43,8 +44,10 @@ object CsvImportParser {
                 if (kind == TransactionKind.TRANSFER) require(category.isEmpty() && account.isEmpty() && from.isNotEmpty() && to.isNotEmpty() && !from.equals(to, true)) { "转账需要不同的转出和转入账户，且不能填写分类或收支账户。" }
                 else require(from.isEmpty() && to.isEmpty()) { "收入或支出不能填写转账账户。" }
                 require(cells[12].length <= 255 && cells[12].none { Character.isISOControl(it) }) { "来源应用无效。" }
+                val originalId = if (header == LedgerCsv.headers) cells[13].takeIf { it.isNotEmpty() } else null
+                require(originalId == null || (kind == TransactionKind.REFUND && originalId.length <= 128 && originalId == originalId.trim() && originalId.none { Character.isISOControl(it) })) { "退款关联 ID 无效。" }
                 records += CsvImportRecord(line, id, kind, amount, date.toInstant().toEpochMilli(), zone.id,
-                    cells[10], cells[11], category, account, from, to, cells[12])
+                    cells[10], cells[11], category, account, from, to, cells[12], originalId)
             } catch (error: Exception) {
                 issues += CsvImportIssue(line, if (error is IllegalArgumentException && !error.message.isNullOrBlank()) error.message!! else "日期、时区或字段格式无效。")
             }
@@ -52,7 +55,7 @@ object CsvImportParser {
         return CsvParsedFile(records, issues, lines.size - 1, legacy)
     }
 
-    private fun readRecords(text: String): List<Pair<Int, List<String>>> {
+    internal fun readRecords(text: String): List<Pair<Int, List<String>>> {
         val result = mutableListOf<Pair<Int, List<String>>>()
         val fields = mutableListOf<String>(); val field = StringBuilder()
         var quoted = false; var closed = false; var started = false; var index = 0; var line = 1; var recordLine = 1

@@ -86,8 +86,8 @@ private fun LazyListScope.ledgerRows(state: LedgerUiState, viewModel: LedgerView
                 // Summarize this result group; mark a potentially unfinished paginated day.
                 FlowRow(Modifier.weight(1.8f), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text((if (possiblyPartial) "已加载" else "") + "${rows.size}笔", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
-                    Text("收 ${formatMoney(rows.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amountMinor })}", fontSize = 11.sp, color = LedgerColors.income)
-                    Text("支 ${formatMoney(rows.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amountMinor })}", fontSize = 11.sp, color = LedgerColors.expense)
+                    Text("收 ${formatMoney(LedgerRules.summarize(rows).income)}", fontSize = 11.sp, color = LedgerColors.income)
+                    Text("支 ${formatMoney(LedgerRules.summarize(rows).expense)}", fontSize = 11.sp, color = LedgerColors.expense)
                 }
             }
         }
@@ -123,7 +123,7 @@ private fun LedgerFilterButton(state: LedgerUiState, viewModel: LedgerViewModel)
     LedgerBottomSheet(show = showFilters, title = "筛选账单", onDismissRequest = { showFilters = false }) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
             item { ChoiceGroup("类型", listOf(null to "全部") + TransactionKind.entries.map { it to it.label }, state.selection.kind, viewModel::filter) }
-            item { ChoiceGroup("分类", listOf(null to "全部分类") + state.categories.filter { state.selection.kind == null || it.kind == state.selection.kind }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.categoryId, viewModel::filterCategory) }
+            item { ChoiceGroup("分类", listOf(null to "全部分类") + state.categories.filter { state.selection.kind == null || it.kind == state.selection.kind.categoryKind }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.categoryId, viewModel::filterCategory) }
             item { ChoiceGroup("账户", listOf(null to "全部账户") + state.accounts.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.accountId, viewModel::filterAccount) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -140,7 +140,7 @@ private fun LedgerCompactRow(row: LedgerTransaction, state: LedgerUiState, first
     val category = state.categories.find { it.id == row.categoryId }?.name ?: "未分类"
     fun account(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
     val accounts = if (row.kind == TransactionKind.TRANSFER) "${account(row.fromAccountId)} → ${account(row.toAccountId)}" else account(row.accountId)
-    val amountColor = when (row.kind) { TransactionKind.EXPENSE -> LedgerColors.expense; TransactionKind.INCOME -> LedgerColors.income; TransactionKind.TRANSFER -> MiuixTheme.colorScheme.onSurface }
+    val amountColor = when (row.kind) { TransactionKind.EXPENSE -> LedgerColors.expense; TransactionKind.INCOME, TransactionKind.REFUND -> LedgerColors.income; TransactionKind.TRANSFER -> MiuixTheme.colorScheme.onSurface }
     val shape = RoundedCornerShape(topStart = if (first) 22.dp else 0.dp, topEnd = if (first) 22.dp else 0.dp, bottomStart = if (last) 22.dp else 0.dp, bottomEnd = if (last) 22.dp else 0.dp)
     Card(Modifier.fillMaxWidth().clip(shape), cornerRadius = 0.dp, insideMargin = PaddingValues(horizontal = 16.dp, vertical = 0.dp), onClick = onOpen) {
         Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -152,8 +152,8 @@ private fun LedgerCompactRow(row: LedgerTransaction, state: LedgerUiState, first
                 Text((if (row.kind == TransactionKind.TRANSFER) accounts else "$category · $accounts") + " · " + Instant.ofEpochMilli(row.occurredAt).atZone(ZoneId.of(state.zoneId)).format(DateTimeFormatter.ofPattern("HH:mm")), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = amountColor)
-                Text(when (row.sourcePackage) { "com.tencent.mm" -> "微信"; "com.eg.android.AlipayGphone" -> "支付宝"; "io.qingledger.paymentsimulator" -> "测试器"; null -> if (row.kind == TransactionKind.TRANSFER) "转账" else "手动"; else -> "自动记账" }, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME, TransactionKind.REFUND -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = amountColor)
+                Text(if (row.kind == TransactionKind.REFUND) "退款" else when (row.sourcePackage) { "com.tencent.mm" -> "微信"; "com.eg.android.AlipayGphone" -> "支付宝"; "io.qingledger.paymentsimulator" -> "测试器"; null -> if (row.kind == TransactionKind.TRANSFER) "转账" else "手动"; else -> "自动记账" }, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
         }
         if (!last) Box(Modifier.fillMaxWidth().padding(start = 44.dp).height(0.5.dp).background(MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.12f)))

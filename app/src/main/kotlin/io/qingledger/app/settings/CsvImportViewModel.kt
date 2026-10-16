@@ -16,12 +16,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 data class CsvImportState(val busy: Boolean = false, val plan: CsvImportPlan? = null,
-    val result: CsvImportResult? = null, val error: String? = null)
+    val result: CsvImportResult? = null, val error: String? = null, val source: ImportSource = ImportSource.QINGLEDGER)
 
 class CsvImportViewModel(private val repository: CsvImportRepository, private val resolver: ContentResolver) : ViewModel() {
     private val mutableState = MutableStateFlow(CsvImportState())
     val state = mutableState.asStateFlow()
-    fun reset() { if (!state.value.busy) mutableState.value = CsvImportState() }
+    fun reset(source: ImportSource = ImportSource.QINGLEDGER) { if (!state.value.busy) mutableState.value = CsvImportState(source = source) }
     fun load(uri: Uri) = action {
         mutableState.update { it.copy(plan = null, result = null) }
         val bytes = (resolver.openInputStream(uri) ?: throw IOException()).use { input ->
@@ -30,15 +30,18 @@ class CsvImportViewModel(private val repository: CsvImportRepository, private va
             while (true) {
                 val size = input.read(buffer)
                 if (size < 0) break
-                require(output.size() + size <= CsvImportRepository.MAX_BYTES) { "CSV 文件超过 16MB。" }
+                require(output.size() + size <= CsvImportRepository.MAX_BYTES) { "账单文件超过 16MB。" }
                 output.write(buffer, 0, size)
             }
             output.toByteArray()
         }
+        val file = if (state.value.source != ImportSource.QINGLEDGER) PlatformBillParser.parse(bytes, state.value.source) else {
         val text = try { Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString() }
         catch (_: java.nio.charset.CharacterCodingException) { throw IllegalArgumentException("请选择 UTF-8 编码的轻账 CSV 文件。") }
-        val plan = repository.preview(CsvImportParser.parse(text))
+        CsvImportParser.parse(text)
+        }
+        val plan = repository.preview(file)
         mutableState.update { it.copy(plan = plan) }
     }
     fun choose(key: String, choice: CsvMappingChoice) = action {
@@ -50,6 +53,12 @@ class CsvImportViewModel(private val repository: CsvImportRepository, private va
     fun refresh() = action {
         val plan = state.value.plan ?: return@action
         val updated = repository.preview(plan.file, plan.mappings.associate { it.key to it.choice })
+        mutableState.update { it.copy(plan = updated) }
+    }
+    fun unlinkRefund(id: String) = action {
+        val plan = state.value.plan ?: return@action
+        val file = plan.file.copy(records = plan.file.records.map { if (it.id == id) it.copy(originalExpenseId = null) else it })
+        val updated = repository.preview(file, plan.mappings.associate { it.key to it.choice })
         mutableState.update { it.copy(plan = updated) }
     }
     fun commit() = action {

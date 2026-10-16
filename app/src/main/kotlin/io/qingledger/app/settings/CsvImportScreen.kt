@@ -32,9 +32,13 @@ fun LazyListScope.csvImportPage(state: CsvImportState, viewModel: CsvImportViewM
         SettingsSection {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 val record = row.record
-                Text(if (record == null) "无效账单" else "${record.merchant.ifBlank { record.category.ifBlank { "账单" } }} · ¥${BigDecimal.valueOf(record.amountMinor, 2).toPlainString()}", fontSize = 14.sp)
+                Text(if (record == null) (if (row.status == CsvImportStatus.SKIPPED) "跳过记录" else "无效账单") else "${record.kind.label} · ${record.merchant.ifBlank { record.category.ifBlank { "账单" } }} · ¥${BigDecimal.valueOf(record.amountMinor, 2).toPlainString()}", fontSize = 14.sp)
                 Text("第 ${row.line} 行 · ${row.message}", fontSize = 12.sp,
                     color = if (row.status == CsvImportStatus.INVALID) LedgerColors.expense else MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                if (record?.kind == TransactionKind.REFUND) {
+                    Text(if (record.originalExpenseId == null) "未关联原单 · 按所选分类冲减支出" else "已关联原支出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    if (record.originalExpenseId != null) Button(onClick = { viewModel.unlinkRefund(record.id) }, enabled = !state.busy) { Text("解除关联") }
+                }
             }
         }
     }
@@ -45,7 +49,7 @@ private fun CsvImportFile(state: CsvImportState, viewModel: CsvImportViewModel) 
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) viewModel.load(uri) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SettingsSection {
-            SettingsNavigationRow("轻账 CSV", "UTF-8 · 最大 16MB / 50000 笔", LedgerIcons.Upload,
+            SettingsNavigationRow(state.source.title, "${state.source.hint} · 最大 16MB / 50000 笔", LedgerIcons.Upload,
                 { open.launch(arrayOf("*/*")) }, enabled = !state.busy)
         }
         state.plan?.let { plan ->
@@ -53,10 +57,11 @@ private fun CsvImportFile(state: CsvImportState, viewModel: CsvImportViewModel) 
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("可导入 ${plan.ready} 笔 · 重复 ${plan.duplicates} 笔", fontSize = 16.sp)
                     Text("待匹配 ${plan.pending} 笔 · 无效 ${plan.invalid} 笔", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    if (plan.skipped > 0) Text("按交易状态跳过 ${plan.skipped} 笔", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 }
             }
         }
-        state.result?.let { StatusCard("导入完成", "已导入 ${it.imported} 笔 · 重复跳过 ${it.skipped} 笔 · 无效 ${it.failed} 笔") }
+        state.result?.let { StatusCard("导入完成", "已导入 ${it.imported} 笔 · 跳过 ${it.skipped} 笔 · 无效 ${it.failed} 笔") }
         if (state.busy) Text("正在处理…", fontSize = 13.sp)
         state.error?.let { StatusCard("导入提示", it) }
     }
@@ -74,7 +79,10 @@ private fun CsvImportConfirm(state: CsvImportState, viewModel: CsvImportViewMode
     }
     LedgerBottomSheet(confirm, "确认导入", { if (!state.busy) confirm = false }, allowDismiss = !state.busy) {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Text("导入 ${plan.ready} 笔，跳过重复 ${plan.duplicates} 笔、无效 ${plan.invalid} 笔。")
+            Text("导入 ${plan.ready} 笔账单。")
+            val skipped = listOfNotNull(if (plan.duplicates > 0) "重复 ${plan.duplicates} 笔" else null,
+                if (plan.skipped > 0) "按状态 ${plan.skipped} 笔" else null, if (plan.invalid > 0) "无效 ${plan.invalid} 笔" else null)
+            if (skipped.isNotEmpty()) Text("跳过：${skipped.joinToString("、")}。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Text("现有账单不会被覆盖；新增或恢复的分类与账户将在确认后保存。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { confirm = false }, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text("取消") }

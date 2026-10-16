@@ -17,7 +17,7 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
     }
     private fun requests(row: CsvImportRecord): List<Request> = buildList {
         if (row.kind != TransactionKind.TRANSFER) {
-            if (row.category.isNotEmpty()) add(Request(row.category, if (row.kind == TransactionKind.EXPENSE) CsvReferenceType.EXPENSE_CATEGORY else CsvReferenceType.INCOME_CATEGORY, false))
+            if (row.category.isNotEmpty()) add(Request(row.category, if (row.kind.categoryKind == TransactionKind.EXPENSE) CsvReferenceType.EXPENSE_CATEGORY else CsvReferenceType.INCOME_CATEGORY, false))
             if (row.account.isNotEmpty()) add(Request(row.account, CsvReferenceType.ACCOUNT, false))
         } else {
             add(Request(row.fromAccount, CsvReferenceType.ACCOUNT, true)); add(Request(row.toAccount, CsvReferenceType.ACCOUNT, true))
@@ -34,6 +34,7 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
         val conflicts = file.records.groupBy { it.id }.filterValues { records -> records.distinctBy { it.copy(line = 0) }.size > 1 }.keys
         val seen = mutableSetOf<String>()
         val preview = file.issues.map { CsvImportPreviewRow(it.line, null, CsvImportStatus.INVALID, it.message) }.toMutableList()
+        preview += file.skipped.map { CsvImportPreviewRow(it.line, null, CsvImportStatus.SKIPPED, it.message) }
         val candidates = file.records.filter { row ->
             val status = when {
                 row.id in existing -> CsvImportStatus.DUPLICATE
@@ -77,13 +78,31 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
             preview += CsvImportPreviewRow(row.line, row, when { unresolved -> CsvImportStatus.NEEDS_MAPPING; problem != null -> CsvImportStatus.INVALID; else -> CsvImportStatus.READY },
                 when { unresolved -> "请先匹配分类或账户。"; problem != null -> problem; else -> "可导入" })
         }
-        return CsvImportPlan(file, mappings, preview.sortedBy { it.line }, categories, accounts)
+        val live = dao.allTransactionsForBackup().filter { it.deletedAt == null }.map { it.domain() }
+        val proposed = preview.filter { it.status == CsvImportStatus.READY }.map { item ->
+            val row = item.record!!
+            val draft = draft(row) { key ->
+                val choice = byKey.getValue(key).choice
+                when (choice.action) { CsvMappingAction.NONE -> null; CsvMappingAction.CREATE -> "create:$key"; else -> choice.id }
+            }
+            LedgerTransaction(row.id, row.kind, row.amountMinor, row.occurredAt, row.merchant, draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, row.zoneId, row.sourcePackage, row.originalExpenseId)
+        }
+        val all = live + proposed
+        val byId = all.associateBy { it.id }
+        val refundsByOriginal = all.filter { it.kind == TransactionKind.REFUND && it.originalExpenseId != null }.groupBy { it.originalExpenseId }
+        val problems = mutableMapOf<String, String?>()
+        proposed.filter { it.kind == TransactionKind.REFUND && it.originalExpenseId != null }.groupBy { it.originalExpenseId }.forEach { (originalId, refunds) ->
+            val problem = RefundRules.validate(listOfNotNull(byId[originalId]) + refundsByOriginal[originalId].orEmpty())
+            refunds.forEach { problems[it.id] = problem }
+        }
+        val checked = preview.map { item -> problems[item.record?.id]?.let { item.copy(status = CsvImportStatus.INVALID, message = it) } ?: item }
+        return CsvImportPlan(file, mappings, checked.sortedBy { it.line }, categories, accounts)
     }
     private fun draft(row: CsvImportRecord, resolve: (String) -> String?): TransactionDraft {
         fun id(name: String, type: CsvReferenceType): String? = if (name.isEmpty()) null else resolve(Request(name, type, false).key)
         return TransactionDraft(row.kind, row.amountMinor, row.occurredAt, row.merchant,
-            categoryId = if (row.kind == TransactionKind.TRANSFER) null else id(row.category, if (row.kind == TransactionKind.EXPENSE) CsvReferenceType.EXPENSE_CATEGORY else CsvReferenceType.INCOME_CATEGORY),
-            accountId = id(row.account, CsvReferenceType.ACCOUNT), fromAccountId = id(row.fromAccount, CsvReferenceType.ACCOUNT), toAccountId = id(row.toAccount, CsvReferenceType.ACCOUNT), note = row.note)
+            categoryId = if (row.kind == TransactionKind.TRANSFER) null else id(row.category, if (row.kind.categoryKind == TransactionKind.EXPENSE) CsvReferenceType.EXPENSE_CATEGORY else CsvReferenceType.INCOME_CATEGORY),
+            accountId = id(row.account, CsvReferenceType.ACCOUNT), fromAccountId = id(row.fromAccount, CsvReferenceType.ACCOUNT), toAccountId = id(row.toAccount, CsvReferenceType.ACCOUNT), note = row.note, originalExpenseId = row.originalExpenseId)
     }
     override suspend fun commit(plan: CsvImportPlan): CsvImportResult = withContext(Dispatchers.IO) {
         database.withTransaction {
@@ -110,10 +129,12 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
                 val draft = draft(row) { ids[it] }
                 check(LedgerRules.validate(draft) == null) { "导入内容校验失败。" }
                 dao.insert(TransactionEntity(row.id, "default", row.kind.name, row.amountMinor, "CNY", row.occurredAt, row.zoneId, row.merchant,
-                    draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, now, now, sourcePackage = row.sourcePackage.takeIf { it.isNotBlank() }))
+                    draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, now, now, sourcePackage = row.sourcePackage.takeIf { it.isNotBlank() }, originalExpenseId = row.originalExpenseId))
                 dao.log(EditEntity(UUID.randomUUID().toString(), row.id, 0, "IMPORT_CSV", now))
             }
-            CsvImportResult(ready.size, fresh.duplicates, fresh.invalid)
+            RefundRules.validate(dao.allTransactionsForBackup().filter { it.deletedAt == null }.map { it.domain() })?.let { throw IllegalStateException(it) }
+            CsvImportResult(ready.size, fresh.duplicates + fresh.skipped, fresh.invalid)
         }
     }
+    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId)
 }

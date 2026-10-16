@@ -29,6 +29,7 @@ import io.qingledger.designsystem.component.LedgerIcons
 import io.qingledger.designsystem.component.LedgerDatePicker
 import io.qingledger.designsystem.component.LedgerTimePicker
 import io.qingledger.designsystem.component.LedgerSegmentedControl
+import io.qingledger.designsystem.component.formatMoney
 import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.*
 import java.math.BigDecimal
@@ -55,6 +56,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     var account by rememberSaveable { mutableStateOf(previous?.accountId) }
     var from by rememberSaveable { mutableStateOf(previous?.fromAccountId) }
     var to by rememberSaveable { mutableStateOf(previous?.toAccountId) }
+    var originalId by rememberSaveable { mutableStateOf(previous?.originalExpenseId) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var panel by rememberSaveable { mutableStateOf<String?>(null) }
     var timeError by rememberSaveable { mutableStateOf<String?>(null) }
@@ -68,7 +70,8 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(18.dp)) {
             LedgerSegmentedControl(TransactionKind.entries.map { it.label }, if (kindSelected) kind.ordinal else -1, { index ->
                 val next = TransactionKind.entries[index]
-                if (kind != next) category = null
+                if (kind.categoryKind != next.categoryKind) category = null
+                if (next != TransactionKind.REFUND) originalId = null
                 kindName = next.name; kindSelected = true; error = null
             }, enabled = !busy)
             Row(Modifier.fillMaxWidth().heightIn(min = 96.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -84,7 +87,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
             if (kind != TransactionKind.TRANSFER) {
                 Text("分类", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(14.dp))
-                val available = state.categories.filter { it.kind == kind && (!it.archived || it.id == previous?.categoryId) }
+                val available = state.categories.filter { it.kind == kind.categoryKind && (!it.archived || it.id == previous?.categoryId) }
                 val options = available.map { EditorCategory(it.id, it.name, LedgerIcons.forCategory(it.name)) } +
                     if (available.none { it.name == "未分类" }) listOf(EditorCategory(null, "未分类", LedgerIcons.Other)) else emptyList()
                 val tiles = options + if (onManageCategories != null) listOf(EditorCategory("manage", "管理", LedgerIcons.Settings)) else emptyList()
@@ -113,6 +116,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
             }
         }
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+            if (kind == TransactionKind.REFUND) EditorSelectionRow("关联支出", if (originalId == null) "未关联" else state.rows.find { it.id == originalId }?.let { "${it.merchant.ifBlank { "支出" }} · ${formatMoney(it.amountMinor)}" } ?: "已关联原支出", !busy) { openPanel("original") }
             if (kind != TransactionKind.TRANSFER) EditorSelectionRow("资金账户", accountName(account), !busy) { openPanel("account") }
             else {
                 EditorSelectionRow("转出账户", if (from == null) "请选择" else accountName(from), !busy) { openPanel("from") }
@@ -139,15 +143,29 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                     categoryId = if (kind == TransactionKind.TRANSFER) null else category,
                     accountId = if (kind == TransactionKind.TRANSFER) null else account,
                     fromAccountId = if (kind == TransactionKind.TRANSFER) from else null,
-                    toAccountId = if (kind == TransactionKind.TRANSFER) to else null, note = note)
+                    toAccountId = if (kind == TransactionKind.TRANSFER) to else null, note = note,
+                    originalExpenseId = if (kind == TransactionKind.REFUND) originalId else null)
                 error = LedgerRules.validate(draft)
                 if (error == null) onSave(draft)
             }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 48.dp) { Text(if (busy) "保存中…" else saveLabel) }
         }
     }
-    val panelTitle = when (panel) { "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; "date" -> "选择日期"; else -> "选择时间" }
+    val panelTitle = when (panel) { "original" -> "关联原支出"; "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; "date" -> "选择日期"; else -> "选择时间" }
     LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
-        if (panel == "date" || panel == "time") {
+        if (panel == "original") {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item { Button(onClick = { originalId = null; panel = null }, modifier = Modifier.fillMaxWidth()) { Text("不关联") } }
+                item { Text("当前列表中的支出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary) }
+                items(state.rows.filter { it.kind == TransactionKind.EXPENSE && it.id != previous?.id }, key = { it.id }) { expense ->
+                    Button(onClick = { originalId = expense.id; category = expense.categoryId; panel = null; error = null }, modifier = Modifier.fillMaxWidth()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${expense.merchant.ifBlank { "支出" }} · ${formatMoney(expense.amountMinor)}")
+                            Text(Instant.ofEpochMilli(expense.occurredAt).atZone(ZoneId.of(expense.zoneId)).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " · " + accountName(expense.accountId), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        }
+                    }
+                }
+            }
+        } else if (panel == "date" || panel == "time") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (panel == "date") LedgerDatePicker(LocalDate.parse(pendingDate), { pendingDate = it.toString(); timeError = null }, enabled = !busy)
                 else LedgerTimePicker(LocalTime.parse(pendingTime), { pendingTime = it.format(DateTimeFormatter.ofPattern("HH:mm")); timeError = null }, enabled = !busy)

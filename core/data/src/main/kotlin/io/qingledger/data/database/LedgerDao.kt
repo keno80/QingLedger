@@ -49,7 +49,7 @@ interface LedgerDao {
     fun transactions(start: Long, end: Long, query: String, kind: String?, category: String?, account: String?, limit: Int): Flow<List<TransactionEntity>>
 
     @Query("""SELECT COALESCE(SUM(CASE WHEN kind = 'INCOME' THEN amountMinor ELSE 0 END), 0) AS income,
-        COALESCE(SUM(CASE WHEN kind = 'EXPENSE' THEN amountMinor ELSE 0 END), 0) AS expense
+        COALESCE(SUM(CASE WHEN kind = 'EXPENSE' THEN amountMinor WHEN kind = 'REFUND' THEN -amountMinor ELSE 0 END), 0) AS expense
         FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL AND occurredAt >= :start AND occurredAt < :end""")
     fun summary(start: Long, end: Long): Flow<SummaryRow>
 
@@ -58,7 +58,7 @@ interface LedgerDao {
 
     @Query("""SELECT a.id, a.name, a.archived, a.openingBalanceMinor,
         COALESCE(SUM(CASE
-            WHEN t.kind = 'INCOME' AND t.accountId = a.id THEN t.amountMinor
+            WHEN t.kind IN ('INCOME', 'REFUND') AND t.accountId = a.id THEN t.amountMinor
             WHEN t.kind = 'EXPENSE' AND t.accountId = a.id THEN -t.amountMinor
             WHEN t.kind = 'TRANSFER' AND t.fromAccountId = a.id THEN -t.amountMinor
             WHEN t.kind = 'TRANSFER' AND t.toAccountId = a.id THEN t.amountMinor
