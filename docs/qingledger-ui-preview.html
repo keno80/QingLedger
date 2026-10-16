@@ -1923,7 +1923,7 @@ html&gt;body{padding:0}&lt;/style&gt;
 #ql-design-20261014 .ql-toast {position:absolute;bottom:95px;left:22px;right:22px;z-index:6;text-align:center;background:var(--ql-text);color:var(--ql-surface);padding:12px 14px;border-radius:12px;font-size:12px;box-shadow:0 5px 25px #0002}
 #ql-design-20261014 .ql-overlay {position:absolute;inset:0;background:#0005;z-index:5;display:flex;align-items:flex-end}
 #ql-design-20261014 [hidden] {display:none!important}
-#ql-design-20261014 .ql-sheet {width:100%;background:var(--ql-surface);border-radius:26px 26px 0 0;padding:19px 20px 27px}
+#ql-design-20261014 .ql-sheet {width:100%;background:var(--ql-surface);border-radius:26px 26px 0 0;padding:19px 20px calc(24px + env(safe-area-inset-bottom, 0px));max-height:100%;overflow-y:auto;scroll-padding-bottom:24px}
 #ql-design-20261014 .ql-sheet-head {display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;font-size:16px;font-weight:600}
 #ql-design-20261014 .ql-filter-chips {display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 20px}
 #ql-design-20261014 .ql-filter-chips button {background:var(--ql-soft);border-radius:9px;padding:8px 12px;font-size:12px}

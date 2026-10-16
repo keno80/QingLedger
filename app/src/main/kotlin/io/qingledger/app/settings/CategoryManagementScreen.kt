@@ -22,7 +22,7 @@ import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.ReferenceRules
 import io.qingledger.domain.model.TransactionKind
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import io.qingledger.designsystem.component.LedgerBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -75,7 +75,7 @@ internal fun CategoryManagementScreen(state: LedgerUiState, ledger: LedgerViewMo
         }
     }
     val title = when (panel) { "form" -> if (editingId == null) "新增分类" else "修改名称"; "archive" -> "归档分类"; else -> current?.name ?: "管理分类" }
-    OverlayBottomSheet(show = panel != null, title = title, onDismissRequest = { if (!busy) { focus.clearFocus(); panel = null } }) {
+    LedgerBottomSheet(show = panel != null, title = title, onDismissRequest = { if (!busy) { focus.clearFocus(); panel = null } }) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (panel) {
                 "form" -> {

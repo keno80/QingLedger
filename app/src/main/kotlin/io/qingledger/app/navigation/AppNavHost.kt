@@ -143,7 +143,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 onAdd = { if (!state.loading && !busy) openEditor(null) },
             )
         }
-        top.yukonga.miuix.kmp.overlay.OverlayBottomSheet(show = editorCategoryManagement && screen == "edit", title = "管理分类", onDismissRequest = { if (!busy) editorCategoryManagement = false }) {
+        io.qingledger.designsystem.component.LedgerBottomSheet(show = editorCategoryManagement && screen == "edit", title = "管理分类", onDismissRequest = { if (!busy) editorCategoryManagement = false }) {
             val managementState = rememberLazyListState()
             val managementScope = rememberCoroutineScope()
             LazyColumn(state = managementState, modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {

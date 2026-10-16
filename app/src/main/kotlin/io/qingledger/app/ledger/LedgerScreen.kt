@@ -23,7 +23,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import io.qingledger.designsystem.component.LedgerBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 fun LazyListScope.ledgerPage(state: LedgerUiState, viewModel: LedgerViewModel, onSearch: () -> Unit, onOpen: (String) -> Unit) {
@@ -120,7 +120,7 @@ private fun LedgerFilterButton(state: LedgerUiState, viewModel: LedgerViewModel)
     IconButton(onClick = { showFilters = true }, modifier = Modifier.size(48.dp)) {
             Icon(LedgerIcons.Filter, if (filtered) "筛选账单，已设置" else "筛选账单", tint = if (filtered) LedgerColors.accentContent else MiuixTheme.colorScheme.onBackground, modifier = Modifier.size(22.dp))
     }
-    OverlayBottomSheet(show = showFilters, title = "筛选账单", onDismissRequest = { showFilters = false }) {
+    LedgerBottomSheet(show = showFilters, title = "筛选账单", onDismissRequest = { showFilters = false }) {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
             item { ChoiceGroup("类型", listOf(null to "全部") + TransactionKind.entries.map { it to it.label }, state.selection.kind, viewModel::filter) }
             item { ChoiceGroup("分类", listOf(null to "全部分类") + state.categories.filter { state.selection.kind == null || it.kind == state.selection.kind }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }, state.selection.categoryId, viewModel::filterCategory) }

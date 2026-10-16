@@ -34,7 +34,7 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import io.qingledger.designsystem.component.LedgerBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -143,7 +143,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
         }
     }
     val panelTitle = when (panel) { "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; else -> "交易时间" }
-    OverlayBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
+    LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
         if (panel == "time") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 TextField(pendingDate, { pendingDate = it; timeError = null }, label = "日期（yyyy-MM-dd）", enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())

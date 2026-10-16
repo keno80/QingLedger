@@ -18,7 +18,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import io.qingledger.designsystem.component.LedgerBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -89,7 +89,7 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
             Button(onClick = onEdit, enabled = !busy, modifier = Modifier.weight(1.5f), minHeight = 48.dp, colors = ButtonDefaults.buttonColorsPrimary()) { Text("编辑账单") }
         }
     }
-    OverlayBottomSheet(show = confirming, title = "删除账单", onDismissRequest = { if (!busy) confirming = false }) {
+    LedgerBottomSheet(show = confirming, title = "删除账单", onDismissRequest = { if (!busy) confirming = false }) {
         Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Text("确定删除这笔${row.kind.label} ${formatMoney(row.amountMinor)} 吗？删除后不再计入统计，可在 10 秒内撤销。", fontSize = 14.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
