@@ -70,7 +70,7 @@
 - AGP 9.4.1、Gradle 9.7.1、Kotlin 2.4.20。
 - Compose Multiplatform 1.12.0、Compose miuix 0.9.4；仅交付 Android。
 - Android Studio 打开此目录，配置本机 SDK。local.properties 不进入版本控制。
-- 用户最新约定：除非明确要求，否则不默认执行构建验证；以最新用户要求为准。
+- 用户最新约定：每次需求修改后默认执行 Debug 构建、真机安装、相关自动化测试和功能回归，并更新验收文档，无需再次提醒。
 
 依赖组合与状态详见 [兼容说明](docs/compatibility.md)，进度和人工验收清单详见 [开发进度](docs/progress.md)。
 
