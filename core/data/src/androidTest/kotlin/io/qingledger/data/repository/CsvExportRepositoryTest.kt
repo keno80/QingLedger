@@ -1,6 +1,7 @@
 package io.qingledger.data.repository
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import io.qingledger.data.database.*
 import io.qingledger.domain.export.*
@@ -11,6 +12,31 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CsvExportRepositoryTest {
+    @Test fun tooManyRowsAreRejectedWithoutTruncatingOrChangingLedger() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerDatabase::class.java).build()
+        try {
+            RoomLedgerRepository(db).initialize()
+            db.withTransaction {
+                db.openHelper.writableDatabase.compileStatement("""INSERT INTO transactions
+                    (id,bookId,kind,amountMinor,currency,occurredAt,zoneId,merchant,note,revision,createdAt,updatedAt)
+                    VALUES (?,'default','EXPENSE',1,'CNY',0,'UTC','','',0,0,0)""").use { statement ->
+                    repeat(CsvExportRepository.MAX_ROWS + 1) { index ->
+                        statement.bindString(1, "limit-$index")
+                        statement.executeInsert()
+                    }
+                }
+            }
+            try {
+                RoomCsvExportRepository(db).snapshot(CsvExportRequest(CsvExportScope.ALL))
+                fail("Must reject exports over the limit instead of silently truncating")
+            } catch (failure: IllegalArgumentException) { assertTrue(failure.message.orEmpty().contains("50000")) }
+            db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM transactions").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(CsvExportRepository.MAX_ROWS + 1, cursor.getInt(0))
+            }
+        } finally { db.close() }
+    }
+
     @Test fun exportsEntireRangeWithArchivedReferencesAndTransferButExcludesDeletedAndEndBoundary() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerDatabase::class.java).build()
         try {
