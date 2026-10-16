@@ -11,6 +11,13 @@ import androidx.compose.ui.unit.dp
 
 /** Original vector drawings; no image assets copied from the reference project. */
 object LedgerIcons {
+    val Dining = icon("Dining") { moveTo(5f, 3f); lineTo(5f, 10f); curveTo(5f, 14f, 11f, 14f, 11f, 10f); lineTo(11f, 3f); moveTo(8f, 3f); lineTo(8f, 21f); moveTo(18f, 3f); curveTo(14f, 6f, 14f, 13f, 18f, 13f); lineTo(18f, 21f); moveTo(18f, 3f); lineTo(18f, 13f) }
+    val Transport = icon("Transport") { moveTo(6f, 4f); curveTo(6f, 1f, 18f, 1f, 18f, 4f); lineTo(18f, 16f); curveTo(18f, 20f, 6f, 20f, 6f, 16f); close(); moveTo(9f, 5f); lineTo(15f, 5f); lineTo(15f, 10f); lineTo(9f, 10f); close(); moveTo(9f, 15f); lineTo(9.2f, 15f); moveTo(15f, 15f); lineTo(15.2f, 15f); moveTo(9f, 19f); lineTo(6f, 22f); moveTo(15f, 19f); lineTo(18f, 22f) }
+    val Shopping = icon("Shopping") { moveTo(5f, 5f); lineTo(19f, 5f); lineTo(20f, 21f); lineTo(4f, 21f); close(); moveTo(8f, 8f); curveTo(8f, 15f, 16f, 15f, 16f, 8f); moveTo(8f, 5f); curveTo(8f, 0f, 16f, 0f, 16f, 5f) }
+    val Housing = icon("Housing") { moveTo(3f, 8f); lineTo(12f, 3f); lineTo(21f, 8f); close(); moveTo(5f, 11f); lineTo(5f, 18f); moveTo(10f, 11f); lineTo(10f, 18f); moveTo(14f, 11f); lineTo(14f, 18f); moveTo(19f, 11f); lineTo(19f, 18f); moveTo(3f, 21f); lineTo(21f, 21f) }
+    val Entertainment = icon("Entertainment") { moveTo(21f, 12f); curveTo(21f, 24f, 3f, 24f, 3f, 12f); curveTo(3f, 0f, 21f, 0f, 21f, 12f) }
+    val Health = icon("Health") { moveTo(12f, 2f); lineTo(20f, 6f); lineTo(19f, 15f); curveTo(19f, 19f, 12f, 22f, 12f, 22f); curveTo(12f, 22f, 5f, 19f, 5f, 15f); lineTo(4f, 6f); close(); moveTo(12f, 7f); lineTo(12f, 15f); moveTo(8f, 11f); lineTo(16f, 11f) }
+    val Other = icon("Other") { moveTo(3f, 4f); lineTo(13f, 4f); lineTo(22f, 13f); lineTo(13f, 22f); lineTo(3f, 12f); close(); moveTo(7f, 8f); lineTo(7.2f, 8f); moveTo(11f, 9f); lineTo(17f, 15f) }
     val Add = icon("Add") { moveTo(12f, 5f); lineTo(12f, 19f); moveTo(5f, 12f); lineTo(19f, 12f) }
     val Back = icon("Back") { moveTo(15f, 5f); lineTo(8f, 12f); lineTo(15f, 19f) }
     val Next = icon("Next") { moveTo(9f, 5f); lineTo(16f, 12f); lineTo(9f, 19f) }

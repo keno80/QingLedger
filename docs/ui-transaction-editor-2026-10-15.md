@@ -2,6 +2,8 @@
 
 日期：2026-10-15。版本：0.7.5（versionCode 17）。
 
+本页为 0.7.5 的历史实现记录，布局已由 [0.7.6 设计稿对齐](ui-editor-alignment-2026-10-16.md) 替代；分类恢复为表单内网格，输入信息合并为第二张卡片。
+
 ## 页面调整
 
 - 复用 miuix Card、Button、TextField、Icon、OverlayBottomSheet，延续薄荷绿主题。新增与编辑共用 TransactionEditor，候选核对的类型主动选择和自定义保存文案参数继续保留。

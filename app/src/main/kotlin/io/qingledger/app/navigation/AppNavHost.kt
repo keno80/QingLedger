@@ -54,6 +54,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var session by rememberSaveable { mutableStateOf(0) }
     var referenceParent by rememberSaveable { mutableStateOf("list") }
     var transactionParent by rememberSaveable { mutableStateOf("list") }
+    var editorCategoryManagement by rememberSaveable { mutableStateOf(false) }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
         value = true to null
         value = if (selectedId == null) false to null else try { false to ledger.get(selectedId!!) } catch (_: Exception) { false to null }
@@ -98,7 +99,10 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             ) {
                 if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (screen == "edit") Box(Modifier.fillMaxWidth().height(44.dp)) {
+                            IconButton(onClick = { if (!busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
+                            Text(if (selectedId == null) "记一笔" else "编辑账单", Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
                         }
@@ -114,7 +118,8 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     }
                     screen != "list" && selectedId != null && selected.first -> item { StatusCard("正在读取账单", "请稍候。") }
                     screen != "list" && selectedId != null && selected.second == null -> item { Button(onClick = ::closePage) { Text("账单不可用，返回列表") } }
-                    screen == "edit" -> item { TransactionEditor(state, selected.second, busy, { ledger.save(it, selected.second, ::closePage) }, ::closePage) }
+                    screen == "edit" -> item { TransactionEditor(state, selected.second, busy, { ledger.save(it, selected.second, ::closePage) }, ::closePage,
+                        onManageCategories = { editorCategoryManagement = true }) }
                     screen == "detail" -> item { selected.second?.let { row ->
                         val history by androidx.compose.runtime.remember(row.id) { ledger.changes(row.id) }.collectAsStateWithLifecycle(initialValue = emptyList())
                         TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, history)
@@ -137,6 +142,13 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 onSelect = { savedRoute = it.name },
                 onAdd = { if (!state.loading && !busy) openEditor(null) },
             )
+        }
+        top.yukonga.miuix.kmp.overlay.OverlayBottomSheet(show = editorCategoryManagement && screen == "edit", title = "管理分类", onDismissRequest = { if (!busy) editorCategoryManagement = false }) {
+            val managementState = rememberLazyListState()
+            val managementScope = rememberCoroutineScope()
+            LazyColumn(state = managementState, modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
+                item { ReferenceManagementScreen(state, ledger, true, busy, { editorCategoryManagement = false }, { managementScope.launch { managementState.animateScrollToItem(0) } }) }
+            }
         }
         }
     }
