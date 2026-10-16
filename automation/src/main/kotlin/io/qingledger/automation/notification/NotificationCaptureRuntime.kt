@@ -137,6 +137,7 @@ class NotificationCaptureRuntime(
         if (hasAccess()) android.service.notification.NotificationListenerService.requestRebind(ComponentName(app, LedgerNotificationListener::class.java))
     }
     fun clearError() { mutableError.value = null }
+    fun afterRestore() { sessions.clear(); mutableLastEvent.value = null; mutableError.value = null }
     fun removed(sbn: StatusBarNotification) { sessions.remove(sbn.key) }
     fun posted(sbn: StatusBarNotification) {
         val current = settings.value

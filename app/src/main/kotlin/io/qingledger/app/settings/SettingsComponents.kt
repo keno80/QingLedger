@@ -23,8 +23,8 @@ internal fun SettingsSection(title: String? = null, content: @Composable ColumnS
 }
 
 @Composable
-internal fun SettingsNavigationRow(title: String, summary: String?, icon: ImageVector?, onClick: () -> Unit, end: (@Composable RowScope.() -> Unit)? = null) {
-    BasicComponent(modifier = Modifier.fillMaxWidth().heightIn(min = 65.dp), insideMargin = PaddingValues(horizontal = 16.dp, vertical = 13.dp), onClick = onClick,
+internal fun SettingsNavigationRow(title: String, summary: String?, icon: ImageVector?, onClick: () -> Unit, enabled: Boolean = true, end: (@Composable RowScope.() -> Unit)? = null) {
+    BasicComponent(modifier = Modifier.fillMaxWidth().heightIn(min = 65.dp), insideMargin = PaddingValues(horizontal = 16.dp, vertical = 13.dp), onClick = onClick, enabled = enabled,
         startAction = if (icon == null) null else ({
             Box(Modifier.padding(end = 12.dp).size(34.dp).background(LedgerColors.accentSurface, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
                 Icon(icon, null, modifier = Modifier.size(18.dp), tint = LedgerColors.accentContent)

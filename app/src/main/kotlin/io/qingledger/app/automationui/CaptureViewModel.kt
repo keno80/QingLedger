@@ -33,6 +33,7 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
     } }
     fun selectMethod(method: CaptureMethod) = action { runtime.selectMethod(method); refreshAccess() }
     fun reconnect() { refreshAccess(); runtime.requestReconnect() }
+    fun afterRestore() { runtime.afterRestore(); clearMessage(); refreshAccess() }
     fun clearMessage() { messageState.value = null; runtime.clearError() }
     fun enable(enabled: Boolean) = action {
         refreshAccess()

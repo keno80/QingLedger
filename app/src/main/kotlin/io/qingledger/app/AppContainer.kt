@@ -9,6 +9,10 @@ import io.qingledger.domain.repository.LedgerRepository
 import io.qingledger.domain.repository.CaptureRepository
 import io.qingledger.data.repository.RoomCaptureRepository
 import io.qingledger.automation.notification.NotificationCaptureRuntime
+import io.qingledger.data.backup.RoomBackupRepository
+import io.qingledger.domain.repository.BackupPreferences
+import kotlinx.coroutines.flow.first
+import java.io.File
 
 class AppContainer(context: Context) {
     val settingsRepository: SettingsRepository = DataStoreSettingsRepository(context)
@@ -18,4 +22,7 @@ class AppContainer(context: Context) {
     private val captureSources = accessibilitySources + if (BuildConfig.DEBUG) setOf("com.android.shell") else emptySet()
     val captureRepository: CaptureRepository = RoomCaptureRepository(database, ledgerRepository, captureSources)
     val captureRuntime = NotificationCaptureRuntime(context, captureRepository, accessibilitySources)
+    val backupRepository = RoomBackupRepository(context, database, File(context.filesDir, "restore-recovery.qlbackup"),
+        readPreferences = { BackupPreferences(settingsRepository.themeMode.first(), captureRuntime.method.value) },
+        writePreferences = { captureRuntime.selectMethod(it.method); settingsRepository.setThemeMode(it.theme) })
 }

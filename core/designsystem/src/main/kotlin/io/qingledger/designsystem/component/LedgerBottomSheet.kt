@@ -10,8 +10,8 @@ import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 
 /** Content spacing is additional to the system/IME insets managed by miuix. */
 @Composable
-fun LedgerBottomSheet(show: Boolean, title: String, onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
-    OverlayBottomSheet(show = show, title = title, onDismissRequest = onDismissRequest, defaultWindowInsetsPadding = true) {
+fun LedgerBottomSheet(show: Boolean, title: String, onDismissRequest: () -> Unit, allowDismiss: Boolean = true, content: @Composable () -> Unit) {
+    OverlayBottomSheet(show = show, title = title, onDismissRequest = onDismissRequest, allowDismiss = allowDismiss, defaultWindowInsetsPadding = true) {
         Box(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             content()
         }

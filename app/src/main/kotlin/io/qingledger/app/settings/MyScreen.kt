@@ -23,7 +23,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Layout follows the approved my() view in qingledger-ui-preview.html. */
 @Composable
-fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: () -> Unit, onSettings: () -> Unit) {
+fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: () -> Unit, onSettings: () -> Unit, onData: () -> Unit) {
     var panel by rememberSaveable { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Row(Modifier.fillMaxWidth().height(44.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -56,7 +56,7 @@ fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: ()
                 MyQuick("分类管理", LedgerIcons.Other, onCategories, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MyQuick("数据管理", LedgerIcons.Database, { panel = "data" }, Modifier.weight(1f))
+                MyQuick("数据管理", LedgerIcons.Database, onData, Modifier.weight(1f))
                 MyQuick("设置", LedgerIcons.Gear, onSettings, Modifier.weight(1f))
             }
         }
@@ -64,11 +64,10 @@ fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: ()
             MyLink("关于轻账", "版本与更新记录", LedgerIcons.Entertainment) { panel = "about" }
         }
     }
-    val title = when (panel) { "data" -> "数据管理"; "book" -> "当前账本"; "about" -> "关于轻账"; else -> "更多" }
+    val title = when (panel) { "book" -> "当前账本"; "about" -> "关于轻账"; else -> "更多" }
     LedgerBottomSheet(panel != null, title, { panel = null }) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (panel) {
-                "data" -> Text("数据导入、导出和备份暂未实现，当前账单保存在本机。", fontSize = 14.sp)
                 "book" -> Text("当前使用日常账本，暂不支持新增或切换账本。", fontSize = 14.sp)
                 "about" -> {
                     Text("轻账 ${BuildConfig.VERSION_NAME}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LedgerDao {
+    @Query("SELECT * FROM transactions") suspend fun allTransactionsForBackup(): List<TransactionEntity>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun seedBook(book: BookEntity)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun seedCategories(categories: List<CategoryEntity>)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun seedAccounts(accounts: List<AccountEntity>)

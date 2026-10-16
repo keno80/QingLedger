@@ -42,9 +42,12 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
     private val mutableUndo = MutableStateFlow<UndoDeletion?>(null)
     val undo = mutableUndo.asStateFlow()
     private var undoTimer: Job? = null
+    private var observeJob: Job? = null
 
-    init {
-        viewModelScope.launch {
+    init { observeLedger() }
+    private fun observeLedger() {
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
             try {
                 repository.initialize()
                 val zoneId = repository.bookZoneId()
@@ -66,6 +69,11 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
                 mutableMessage.value = "账本读取失败，请重新打开应用。"
             }
         }
+    }
+    fun reloadAfterRestore() {
+        undoTimer?.cancel(); mutableUndo.value = null; mutableMessage.value = null
+        selection.value = LedgerSelection(); mutableState.value = LedgerUiState(); mutableAssets.value = AssetsUiState(); mutableOverview.value = null
+        observeLedger()
     }
 
     fun changeMonth(offset: Long) { selection.update { it.copy(month = it.month.plusMonths(offset), limit = 50) } }

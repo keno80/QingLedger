@@ -12,6 +12,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.qingledger.app.ledger.LedgerViewModel
 import io.qingledger.app.automationui.CaptureViewModel
+import io.qingledger.app.settings.DataManagementViewModel
 import io.qingledger.app.navigation.AppNavHost
 import io.qingledger.designsystem.theme.LedgerTheme
 import io.qingledger.domain.model.ThemeMode
@@ -38,7 +39,8 @@ class MainActivity : ComponentActivity() {
                 val ledger: LedgerViewModel = viewModel(factory = LedgerViewModel.Factory(container.ledgerRepository))
                 val searchLedger: LedgerViewModel = viewModel(key = "ledger-search", factory = LedgerViewModel.Factory(container.ledgerRepository))
                 val capture: CaptureViewModel = viewModel(factory = CaptureViewModel.Factory(container.captureRepository, container.captureRuntime))
-                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, searchLedger = searchLedger, capture = capture)
+                val data: DataManagementViewModel = viewModel(factory = DataManagementViewModel.Factory(container.backupRepository, applicationContext.contentResolver))
+                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, searchLedger = searchLedger, capture = capture, data = data)
             }
         }
     }
