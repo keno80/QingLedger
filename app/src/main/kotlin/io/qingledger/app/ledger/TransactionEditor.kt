@@ -60,9 +60,8 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     var timeError by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingDate by rememberSaveable { mutableStateOf(date) }
     var pendingTime by rememberSaveable { mutableStateOf(time) }
-    var timePart by rememberSaveable { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
-    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; timePart = 0; panel = value; timeError = null }
+    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; panel = value; timeError = null }
     fun accountName(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
     fun parseTime(day: String = date, clock: String = time): LocalDateTime? = try { LocalDateTime.of(LocalDate.parse(day), LocalTime.parse(clock)) } catch (_: DateTimeParseException) { null }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -120,7 +119,8 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                 EditorSelectionRow("转入账户", if (to == null) "请选择" else accountName(to), !busy) { openPanel("to") }
             }
             EditorInputRow("商户 / 标题", merchant, { merchant = it.take(128) }, !busy)
-            EditorSelectionRow("日期与时间", "$date $time", !busy, showArrow = false) { openPanel("time") }
+            EditorSelectionRow("日期", date, !busy) { openPanel("date") }
+            EditorSelectionRow("时间", time, !busy) { openPanel("time") }
             EditorInputRow("备注", note, { note = it.take(500) }, !busy, singleLine = false, divider = false)
         }
         Text("金额、分类和账户放在同一页，少跳转一步。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
@@ -145,13 +145,12 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
             }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 48.dp) { Text(if (busy) "保存中…" else saveLabel) }
         }
     }
-    val panelTitle = when (panel) { "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; else -> "交易时间" }
+    val panelTitle = when (panel) { "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; "date" -> "选择日期"; else -> "选择时间" }
     LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
-        if (panel == "time") {
+        if (panel == "date" || panel == "time") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("$pendingDate $pendingTime", fontSize = 16.sp)
-                LedgerSegmentedControl(listOf("日期", "时间"), timePart, { timePart = it }, enabled = !busy)
-                if (timePart == 0) LedgerDatePicker(LocalDate.parse(pendingDate), { pendingDate = it.toString(); timeError = null }, enabled = !busy)
+                Text(if (panel == "date") pendingDate else pendingTime, fontSize = 16.sp)
+                if (panel == "date") LedgerDatePicker(LocalDate.parse(pendingDate), { pendingDate = it.toString(); timeError = null }, enabled = !busy)
                 else LedgerTimePicker(LocalTime.parse(pendingTime), { pendingTime = it.format(DateTimeFormatter.ofPattern("HH:mm")); timeError = null }, enabled = !busy)
                 timeError?.let { Text(it, fontSize = 13.sp, color = LedgerColors.expense) }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -159,7 +158,10 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                     Button(onClick = {
                         val parsed = parseTime(pendingDate, pendingTime)
                         timeError = when { parsed == null -> "日期或时间格式不正确。"; zone.rules.getValidOffsets(parsed).isEmpty() -> "该时间在所选时区不存在。"; else -> null }
-                        if (timeError == null) { date = pendingDate; time = pendingTime; focus.clearFocus(); panel = null; error = null }
+                        if (timeError == null) {
+                            if (panel == "date") date = pendingDate else time = pendingTime
+                            focus.clearFocus(); panel = null; error = null
+                        }
                     }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确定") }
                 }
             }
