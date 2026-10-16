@@ -85,17 +85,3 @@ fun SettingsScreen(themeMode: ThemeMode, settingsRepository: SettingsRepository,
         }
     }
 }
-
-@Composable
-fun MyScreen(onCategories: () -> Unit, onAccounts: () -> Unit, onSettings: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SettingsGroup("我的轻账") { SettingsDescription("日常账本", "数据保存在本机") }
-        SettingsGroup("账本管理") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onAccounts, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("资金账户") }
-                Button(onClick = onCategories, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("分类管理") }
-            }
-        }
-        Button(onClick = onSettings, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("设置") }
-    }
-}
