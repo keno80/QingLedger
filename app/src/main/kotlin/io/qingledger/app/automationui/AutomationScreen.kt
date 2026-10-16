@@ -112,9 +112,6 @@ fun AutomationScreen(capture: CaptureViewModel) {
         else Text("本次最近事件：" + Instant.ofEpochMilli(lastEvent!!).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")))
         (message ?: runtimeError)?.let { StatusCard("状态提示", it); Button(onClick = capture::clearMessage) { Text("关闭采集提示") } }
         Button(onClick = capture::clearResolved, enabled = !busy) { Text("隐藏已处理事件") }
-        if (io.qingledger.app.BuildConfig.DEBUG) {
-            Button(onClick = { capture.selectMethod(CaptureMethod.NOTIFICATION) }, enabled = !busy) { Text("开发调试：旧通知通道回归") }
-        }
     }
 }
 

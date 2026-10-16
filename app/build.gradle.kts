@@ -12,8 +12,8 @@ android {
         applicationId = "io.qingledger.app"
         minSdk = 30
         targetSdk = 37
-        versionCode = 24
-        versionName = "0.7.12"
+        versionCode = 25
+        versionName = "0.7.13"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

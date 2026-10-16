@@ -25,6 +25,7 @@ import io.qingledger.app.ledger.*
 import io.qingledger.domain.model.LedgerTransaction
 import io.qingledger.designsystem.component.StatusCard
 import io.qingledger.app.settings.SettingsScreen
+import io.qingledger.app.settings.AppearanceScreen
 import io.qingledger.app.settings.ReferenceManagementScreen
 import io.qingledger.app.statistics.StatisticsScreen
 import io.qingledger.designsystem.component.LedgerIcons
@@ -62,7 +63,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     }
     fun closePage() {
         if (screen != "list") stateHolder.removeState(if (screen == "search") "ledger-search" else "$screen-$selectedId-$session")
-        screen = when (screen) { "candidate" -> "automation"; "automation" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
+        screen = when (screen) { "candidate" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
         selectedId = null
     }
     fun openEditor(id: String?) { if (id == null) transactionParent = "list"; selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
@@ -100,9 +101,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             ) {
                 if (screen != "list" || (route != AppRoute.LEDGER && route != AppRoute.SETTINGS)) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (screen == "edit" || screen == "categories") Box(Modifier.fillMaxWidth().height(44.dp)) {
+                        if (screen in setOf("edit", "categories", "preferences", "appearance")) Box(Modifier.fillMaxWidth().height(44.dp)) {
                             IconButton(onClick = { if (!busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
-                            Text(if (screen == "categories") "分类管理" else if (selectedId == null) "记一笔" else "编辑账单", Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text(when (screen) { "categories" -> "分类管理"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
@@ -126,7 +127,8 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, history)
                     } }
                     screen == "categories" || screen == "accounts" -> item { ReferenceManagementScreen(state, ledger, screen == "categories", busy, ::closePage, { pageScope.launch { pageState.animateScrollToItem(0) } }) }
-                    screen == "preferences" -> item { SettingsScreen(themeMode, settingsRepository, { referenceParent = "preferences"; session++; screen = "categories"; ledger.clearMessage() }, { referenceParent = "preferences"; session++; screen = "accounts"; ledger.clearMessage() }, { session++; screen = "automation" }) }
+                    screen == "preferences" -> item { SettingsScreen(capture, { session++; screen = "automation" }, { session++; screen = "appearance" }) }
+                    screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture) }
                         captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }

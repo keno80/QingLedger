@@ -1,87 +1,49 @@
 package io.qingledger.app.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import io.qingledger.designsystem.component.SettingsDescription
-import io.qingledger.designsystem.component.SettingsGroup
-import io.qingledger.designsystem.component.StatusCard
-import io.qingledger.domain.model.ThemeMode
-import io.qingledger.domain.repository.SettingsRepository
-import java.io.IOException
-import kotlinx.coroutines.launch
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.qingledger.app.automationui.CaptureViewModel
+import io.qingledger.designsystem.component.LedgerBottomSheet
+import io.qingledger.designsystem.component.LedgerIcons
+import io.qingledger.designsystem.theme.LedgerColors
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun SettingsScreen(themeMode: ThemeMode, settingsRepository: SettingsRepository, onCategories: () -> Unit, onAccounts: () -> Unit, onAutomation: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var saving by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SettingsGroup("自动记账") {
-            Button(onClick = onAutomation, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("自动记账与识别通知") }
-        }
-        SettingsGroup("账本管理") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onCategories, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("分类管理") }
-                Button(onClick = onAccounts, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("账户管理") }
+fun SettingsScreen(capture: CaptureViewModel, onAutomation: () -> Unit, onAppearance: () -> Unit) {
+    val settings by capture.settings.collectAsStateWithLifecycle()
+    val method by capture.method.collectAsStateWithLifecycle()
+    var privacy by rememberSaveable { mutableStateOf(false) }
+    var developer by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SettingsSection("记账设置") {
+            SettingsNavigationRow("自动记账", if (settings.enabled) "已开启 · ${method.label}" else "已暂停", LedgerIcons.Scan, onAutomation) {
+                Text(if (settings.enabled) "已开启" else "已暂停", modifier = Modifier.background(if (settings.enabled) LedgerColors.accentSurface else MiuixTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, color = if (settings.enabled) LedgerColors.accentContent else MiuixTheme.colorScheme.onSurfaceVariantSummary)
             }
         }
-        SettingsGroup("外观") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { mode ->
-                    val selected = themeMode == mode
-                    Button(
-                        modifier = Modifier.fillMaxWidth().semantics {
-                            role = Role.RadioButton
-                            this.selected = selected
-                        },
-                        minHeight = 48.dp,
-                        enabled = !saving,
-                        colors = if (selected) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors(),
-                        onClick = {
-                            saving = true
-                            error = null
-                            scope.launch {
-                                try {
-                                    settingsRepository.setThemeMode(mode)
-                                } catch (_: IOException) {
-                                    error = "主题保存失败，请重试。"
-                                } finally {
-                                    saving = false
-                                }
-                            }
-                        },
-                    ) {
-                        Text(when (mode) {
-                            ThemeMode.SYSTEM -> "跟随系统"
-                            ThemeMode.LIGHT -> "浅色"
-                            ThemeMode.DARK -> "深色"
-                        })
-                    }
-                }
-            }
+        SettingsSection("显示与隐私") {
+            SettingsNavigationRow("显示与主题", "薄荷绿 · 紧凑列表", LedgerIcons.Palette, onAppearance)
+            SettingsRowDivider()
+            SettingsNavigationRow("隐私与安全", "本地存储，按需授权", LedgerIcons.Privacy, { privacy = true })
         }
-        error?.let { StatusCard("未能保存设置", it) }
-        SettingsGroup("隐私") {
-            SettingsDescription("本地优先", "无需账号。账单保存在本机，不联网。通知采集需单独授权并主动选择来源。")
-        }
-        SettingsGroup("关于") {
-            SettingsDescription("轻账", io.qingledger.app.BuildConfig.VERSION_NAME + " · 本地自动记账")
+        SettingsSection("高级") {
+            SettingsNavigationRow("开发者工具", "调试来源与诊断信息", LedgerIcons.Gear, { developer = true })
         }
     }
+    LedgerBottomSheet(privacy, "隐私与安全", { privacy = false }) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("账单保存在本机，无需注册账号。", fontSize = 14.sp)
+            Text("自动记账需要主动授权并开启所选来源；只读取所选应用的交易信息，不保存页面或通知原文，不执行点击或付款操作。", fontSize = 14.sp)
+            Text("可在自动记账页面暂停采集、关闭来源，或在系统设置中撤销权限。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Button(onClick = { privacy = false }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("知道了") }
+        }
+    }
+    DeveloperToolsSheet(developer, capture) { developer = false }
 }
