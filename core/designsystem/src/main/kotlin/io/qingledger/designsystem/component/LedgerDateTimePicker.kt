@@ -48,7 +48,6 @@ fun LedgerDatePicker(value: LocalDate, onValueChange: (LocalDate) -> Unit, enabl
                 NumberPicker(month.year, { monthText = month.withYear(it).toString() }, range = 1..9999, label = { "${it}年" }, enabled = enabled, visibleItemCount = 3, textStyle = TextStyle(fontSize = 22.sp), modifier = Modifier.weight(1f))
                 NumberPicker(month.monthValue, { monthText = month.withMonth(it).toString() }, range = 1..12, label = { "${it}月" }, enabled = enabled, visibleItemCount = 3, textStyle = TextStyle(fontSize = 22.sp), modifier = Modifier.weight(1f))
             }
-            Button(onClick = { choosingMonth = false }, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("返回日历") }
         } else {
             Row(Modifier.fillMaxWidth()) {
                 listOf("一", "二", "三", "四", "五", "六", "日").forEach {
@@ -75,7 +74,6 @@ fun LedgerDatePicker(value: LocalDate, onValueChange: (LocalDate) -> Unit, enabl
                 }
             }
         }
-        Text("已选：$value", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
     }
 }
 

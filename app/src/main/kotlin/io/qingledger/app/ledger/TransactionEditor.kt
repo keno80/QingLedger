@@ -149,7 +149,6 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
         if (panel == "date" || panel == "time") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(if (panel == "date") pendingDate else pendingTime, fontSize = 16.sp)
                 if (panel == "date") LedgerDatePicker(LocalDate.parse(pendingDate), { pendingDate = it.toString(); timeError = null }, enabled = !busy)
                 else LedgerTimePicker(LocalTime.parse(pendingTime), { pendingTime = it.format(DateTimeFormatter.ofPattern("HH:mm")); timeError = null }, enabled = !busy)
                 timeError?.let { Text(it, fontSize = 13.sp, color = LedgerColors.expense) }
