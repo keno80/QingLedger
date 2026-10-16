@@ -99,9 +99,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             ) {
                 if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (screen == "edit") Box(Modifier.fillMaxWidth().height(44.dp)) {
+                        if (screen == "edit" || screen == "categories") Box(Modifier.fillMaxWidth().height(44.dp)) {
                             IconButton(onClick = { if (!busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
-                            Text(if (selectedId == null) "记一笔" else "编辑账单", Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text(if (screen == "categories") "分类管理" else if (selectedId == null) "记一笔" else "编辑账单", Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)

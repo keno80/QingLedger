@@ -12,6 +12,10 @@ import top.yukonga.miuix.kmp.basic.*
 
 @Composable
 fun ReferenceManagementScreen(state: LedgerUiState, ledger: LedgerViewModel, category: Boolean, busy: Boolean, onBack: () -> Unit, onFocusForm: () -> Unit) {
+    if (category) {
+        CategoryManagementScreen(state, ledger, busy)
+        return
+    }
     var name by rememberSaveable { mutableStateOf("") }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var kindName by rememberSaveable { mutableStateOf(TransactionKind.EXPENSE.name) }

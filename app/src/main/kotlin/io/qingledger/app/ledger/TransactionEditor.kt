@@ -75,16 +75,19 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
             }
             Row(Modifier.fillMaxWidth().heightIn(min = 96.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Text("¥", fontSize = 22.sp)
-                TextField(amount, { amount = it; error = null }, label = "0.00", useLabelAsPlaceholder = true, enabled = !busy, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.widthIn(max = 220.dp).weight(1f, fill = false).semantics { contentDescription = "金额（元）" },
-                    insideMargin = DpSize(8.dp, 12.dp), colors = editorFieldColors(), cursorBrush = SolidColor(LedgerColors.accentContent),
-                    textStyle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center))
+                Box(Modifier.widthIn(max = 220.dp).weight(1f, fill = false)) {
+                    TextField(amount, { amount = it; error = null }, enabled = !busy, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth().semantics { contentDescription = "金额（元）" },
+                        insideMargin = DpSize(8.dp, 12.dp), colors = editorFieldColors(), cursorBrush = SolidColor(LedgerColors.accentContent),
+                        textStyle = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center))
+                    if (amount.isEmpty()) Text("0.00", Modifier.align(Alignment.Center), fontSize = 34.sp, fontWeight = FontWeight.SemiBold, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                }
             }
             if (kind != TransactionKind.TRANSFER) {
                 Text("分类", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(14.dp))
                 val available = state.categories.filter { it.kind == kind && (!it.archived || it.id == previous?.categoryId) }
-                val options = available.map { EditorCategory(it.id, it.name, categoryIcon(it.name)) } +
+                val options = available.map { EditorCategory(it.id, it.name, LedgerIcons.forCategory(it.name)) } +
                     if (available.none { it.name == "未分类" }) listOf(EditorCategory(null, "未分类", LedgerIcons.Other)) else emptyList()
                 val tiles = options + if (onManageCategories != null) listOf(EditorCategory("manage", "管理", LedgerIcons.Settings)) else emptyList()
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -140,7 +143,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                     toAccountId = if (kind == TransactionKind.TRANSFER) to else null, note = note)
                 error = LedgerRules.validate(draft)
                 if (error == null) onSave(draft)
-            }, enabled = !busy, modifier = Modifier.weight(1.8f), colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 48.dp) { Text(if (busy) "保存中…" else saveLabel) }
+            }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 48.dp) { Text(if (busy) "保存中…" else saveLabel) }
         }
     }
     val panelTitle = when (panel) { "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; else -> "交易时间" }
@@ -209,12 +212,3 @@ private fun editorFieldColors() = TextFieldDefaults.textFieldColors(backgroundCo
 private fun EditorDivider() { Box(Modifier.fillMaxWidth().height(0.5.dp).background(MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.12f))) }
 
 private data class EditorCategory(val id: String?, val name: String, val icon: ImageVector)
-private fun categoryIcon(name: String) = when (name) {
-    "餐饮", "美食", "饮食" -> LedgerIcons.Dining
-    "交通" -> LedgerIcons.Transport
-    "购物" -> LedgerIcons.Shopping
-    "居住", "住房" -> LedgerIcons.Housing
-    "娱乐" -> LedgerIcons.Entertainment
-    "医疗", "健康" -> LedgerIcons.Health
-    else -> LedgerIcons.Other
-}
