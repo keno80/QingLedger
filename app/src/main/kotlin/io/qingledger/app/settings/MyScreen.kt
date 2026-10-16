@@ -47,20 +47,19 @@ fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: ()
                 MyMetric("记账天数", overview?.recordedDays, "天", Modifier.weight(1f))
             }
         }
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(0.dp)) {
+            MyLink("当前账本", "日常账本", LedgerIcons.Ledger) { panel = "book" }
+        }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MyQuick("资产与账户", LedgerIcons.Wallet, { panel = "assets" }, Modifier.weight(1f))
                 MyQuick("分类管理", LedgerIcons.Other, onCategories, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MyQuick("设置", LedgerIcons.Gear, onSettings, Modifier.weight(1f))
                 MyQuick("数据管理", LedgerIcons.Database, { panel = "data" }, Modifier.weight(1f))
+                MyQuick("设置", LedgerIcons.Gear, onSettings, Modifier.weight(1f))
             }
         }
-        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(0.dp)) {
-            MyLink("当前账本", "日常账本", LedgerIcons.Ledger) { panel = "book" }
-        }
-        Text("应用", Modifier.padding(start = 4.dp, top = 6.dp), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(0.dp)) {
             MyLink("关于轻账", "版本与更新记录", LedgerIcons.Entertainment) { panel = "about" }
         }
