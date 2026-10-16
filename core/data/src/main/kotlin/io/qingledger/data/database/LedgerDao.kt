@@ -5,6 +5,17 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LedgerDao {
+    @Query("""SELECT t.*, c.name AS categoryName, a.name AS accountName,
+        f.name AS fromAccountName, dest.name AS toAccountName
+        FROM transactions t LEFT JOIN categories c ON c.id=t.categoryId
+        LEFT JOIN accounts a ON a.id=t.accountId
+        LEFT JOIN accounts f ON f.id=t.fromAccountId
+        LEFT JOIN accounts dest ON dest.id=t.toAccountId
+        WHERE t.bookId='default' AND t.deletedAt IS NULL
+        AND (:start IS NULL OR t.occurredAt >= :start) AND (:end IS NULL OR t.occurredAt < :end)
+        ORDER BY t.occurredAt DESC, t.id DESC LIMIT :limit""")
+    suspend fun csvExport(start: Long?, end: Long?, limit: Int): List<CsvExportRow>
+
     @Query("SELECT * FROM transactions") suspend fun allTransactionsForBackup(): List<TransactionEntity>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun seedBook(book: BookEntity)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun seedCategories(categories: List<CategoryEntity>)

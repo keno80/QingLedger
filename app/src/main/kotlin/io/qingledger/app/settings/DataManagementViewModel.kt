@@ -7,6 +7,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.qingledger.domain.repository.BackupInfo
 import io.qingledger.domain.repository.BackupRepository
+import io.qingledger.domain.export.CsvExportRepository
+import io.qingledger.domain.export.CsvExportRequest
+import io.qingledger.domain.export.LedgerCsv
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -19,10 +22,17 @@ import kotlinx.coroutines.withContext
 
 data class DataManagementState(val busy: Boolean = false, val message: String? = null, val preview: BackupInfo? = null, val recoveryAvailable: Boolean = false, val restored: Int = 0)
 
-class DataManagementViewModel(private val backup: BackupRepository, private val resolver: ContentResolver) : ViewModel() {
+class DataManagementViewModel(private val backup: BackupRepository, private val resolver: ContentResolver, private val csvExport: CsvExportRepository) : ViewModel() {
     private val mutableState = MutableStateFlow(DataManagementState(recoveryAvailable = backup.hasRecovery()))
     val state = mutableState.asStateFlow()
     private var selected: ByteArray? = null
+
+    fun exportCsv(uri: Uri, request: CsvExportRequest) = action {
+        val rows = csvExport.snapshot(request)
+        val output = resolver.openOutputStream(uri, "w") ?: throw IOException("Unable to open document")
+        output.bufferedWriter(Charsets.UTF_8).use { LedgerCsv.write(it, rows) }
+        mutableState.update { it.copy(message = "CSV 已导出，共 ${rows.size} 笔账单。") }
+    }
 
     fun create(uri: Uri, recovery: Boolean) = action {
         val bytes = if (recovery) backup.recovery() ?: throw IllegalArgumentException("暂无恢复前备份。") else backup.create()
@@ -66,17 +76,17 @@ class DataManagementViewModel(private val backup: BackupRepository, private val 
             catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.update { it.copy(message = when (error) {
-                    is IOException, is SecurityException -> "文件操作失败，请重新选择位置或文件。未完成的备份请重新创建。"
+                    is IOException, is SecurityException -> "文件操作失败，请重新选择位置或文件。未完成的文件请重新导出。"
                     is IllegalArgumentException, is IllegalStateException -> error.message ?: "备份操作失败。"
                     else -> "操作失败，请重试。"
                 }, recoveryAvailable = backup.hasRecovery()) }
             } finally { mutableState.update { it.copy(busy = false) } }
         }
     }
-    class Factory(private val backup: BackupRepository, private val resolver: ContentResolver) : ViewModelProvider.Factory {
+    class Factory(private val backup: BackupRepository, private val resolver: ContentResolver, private val csvExport: CsvExportRepository) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(DataManagementViewModel::class.java))
-            @Suppress("UNCHECKED_CAST") return DataManagementViewModel(backup, resolver) as T
+            @Suppress("UNCHECKED_CAST") return DataManagementViewModel(backup, resolver, csvExport) as T
         }
     }
 }

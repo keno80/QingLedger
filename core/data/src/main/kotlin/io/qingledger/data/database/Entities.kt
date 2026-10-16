@@ -44,3 +44,8 @@ data class EditEntity(@PrimaryKey val id: String, val transactionId: String, val
 
 data class SummaryRow(val income: Long, val expense: Long)
 data class AccountBalanceRow(val id: String, val name: String, val archived: Boolean, val openingBalanceMinor: Long?, val movementMinor: Long)
+
+data class CsvExportRow(
+    @Embedded val transaction: TransactionEntity,
+    val categoryName: String?, val accountName: String?, val fromAccountName: String?, val toAccountName: String?,
+)

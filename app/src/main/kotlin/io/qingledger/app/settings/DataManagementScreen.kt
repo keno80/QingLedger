@@ -44,7 +44,7 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
         SettingsSection("导入与导出") {
             SettingsNavigationRow("导入账单", "选择平台与文件", LedgerIcons.Upload, { panel = "import" }, enabled = enabled)
             SettingsRowDivider()
-            SettingsNavigationRow("导出账单", "按范围导出 CSV", LedgerIcons.Download, { info = "CSV 账单导出暂未实现，当前可创建包含完整账本与设置的本地备份。" }, enabled = enabled)
+            SettingsNavigationRow("导出账单", "按范围导出 CSV", LedgerIcons.Download, { showCaptureMessage = false; panel = "csv" }, enabled = enabled)
         }
         SettingsSection("维护") {
             SettingsNavigationRow("隐藏已处理采集记录", "保留重复抑制信息", LedgerIcons.Archive, { panel = "hide" }, enabled = enabled)
@@ -56,7 +56,8 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
         if (state.busy) StatusCard("正在处理", "请等待完成后再离开。")
         (if (showCaptureMessage) captureMessage else state.message)?.let { StatusCard("数据管理提示", it) }
     }
-    LedgerBottomSheet(panel != null, when (panel) { "import" -> "选择导入来源"; "hide" -> "隐藏已处理记录"; else -> "恢复备份" }, { if (enabled) panel = null }) {
+    CsvExportSheet(show = panel == "csv", enabled = enabled, data = data, onDismiss = { panel = null })
+    LedgerBottomSheet(panel != null && panel != "csv", when (panel) { "import" -> "选择导入来源"; "hide" -> "隐藏已处理记录"; else -> "恢复备份" }, { if (enabled) panel = null }) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (panel) {
                 "restore" -> {
