@@ -19,7 +19,14 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
     }
     override suspend fun bookZoneId() = dao.book().zoneId
     override val categories = dao.categories().map { rows -> rows.map { Category(it.id, it.name, TransactionKind.valueOf(it.kind), it.archived) } }
-    override val accounts = dao.accounts().map { rows -> rows.map { Account(it.id, it.name, it.archived) } }
+    override val accounts = dao.accounts().map { rows -> rows.map { Account(it.id, it.name, it.archived, it.openingBalanceMinor) } }
+    override fun accountBalances() = dao.accountBalances().map { rows -> rows.map { AccountBalance(Account(it.id, it.name, it.archived, it.openingBalanceMinor), it.movementMinor) } }
+    override suspend fun saveAccountDetails(name: String, openingBalanceMinor: Long?, id: String?) = database.withTransaction {
+        require(openingBalanceMinor == null || openingBalanceMinor in -LedgerRules.MAX_AMOUNT..LedgerRules.MAX_AMOUNT) { "初始余额超出范围。" }
+        val savedId = saveAccount(name, id)
+        dao.setOpeningBalance(savedId, openingBalanceMinor)
+        savedId
+    }
     override fun transactions(filter: LedgerFilter) = dao.transactions(filter.period.start, filter.period.end, filter.query, filter.kind?.name, filter.categoryId, filter.accountId, filter.limit.coerceIn(1, 10000)).map { rows -> rows.map { it.domain() } }
     override fun summary(period: PeriodRange) = dao.summary(period.start, period.end).map { LedgerSummary(it.income, it.expense) }
     override fun overview(zoneId: String) = dao.recordedTimes().map { times ->

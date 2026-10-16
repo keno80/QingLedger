@@ -6,7 +6,7 @@ import java.math.BigDecimal
 
 enum class TransactionKind(val label: String) { EXPENSE("支出"), INCOME("收入"), TRANSFER("转账") }
 data class Category(val id: String, val name: String, val kind: TransactionKind, val archived: Boolean = false)
-data class Account(val id: String, val name: String, val archived: Boolean = false)
+data class Account(val id: String, val name: String, val archived: Boolean = false, val openingBalanceMinor: Long? = null)
 data class LedgerTransaction(
     val id: String,
     val kind: TransactionKind,

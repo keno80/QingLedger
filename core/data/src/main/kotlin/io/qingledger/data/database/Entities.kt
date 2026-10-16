@@ -9,7 +9,7 @@ data class BookEntity(@PrimaryKey val id: String, val name: String, val currency
 data class CategoryEntity(@PrimaryKey val id: String, val bookId: String, val name: String, val kind: String, val archived: Boolean = false)
 
 @Entity(tableName = "accounts", foreignKeys = [ForeignKey(entity = BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"])], indices = [Index("bookId")])
-data class AccountEntity(@PrimaryKey val id: String, val bookId: String, val name: String, val archived: Boolean = false)
+data class AccountEntity(@PrimaryKey val id: String, val bookId: String, val name: String, val archived: Boolean = false, val openingBalanceMinor: Long? = null)
 
 @Entity(tableName = "transactions", foreignKeys = [
     ForeignKey(entity = BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"]),
@@ -43,3 +43,4 @@ data class TransactionEntity(
 data class EditEntity(@PrimaryKey val id: String, val transactionId: String, val revision: Int, val operation: String, val createdAt: Long)
 
 data class SummaryRow(val income: Long, val expense: Long)
+data class AccountBalanceRow(val id: String, val name: String, val archived: Boolean, val openingBalanceMinor: Long?, val movementMinor: Long)

@@ -19,6 +19,7 @@ interface LedgerDao {
     @Insert suspend fun addAccount(account: AccountEntity)
     @Query("UPDATE categories SET name = :name WHERE id = :id") suspend fun renameCategory(id: String, name: String)
     @Query("UPDATE accounts SET name = :name WHERE id = :id") suspend fun renameAccount(id: String, name: String)
+    @Query("UPDATE accounts SET openingBalanceMinor = :amount WHERE id = :id") suspend fun setOpeningBalance(id: String, amount: Long?)
     @Query("UPDATE categories SET archived = 0 WHERE id = :id") suspend fun restoreCategory(id: String)
     @Query("UPDATE accounts SET archived = 0 WHERE id = :id") suspend fun restoreAccount(id: String)
     @Query("SELECT * FROM transaction_edits WHERE transactionId = :id ORDER BY revision DESC, createdAt DESC") fun edits(id: String): Flow<List<EditEntity>>
@@ -41,6 +42,18 @@ interface LedgerDao {
 
     @Query("SELECT occurredAt FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL")
     fun recordedTimes(): Flow<List<Long>>
+
+    @Query("""SELECT a.id, a.name, a.archived, a.openingBalanceMinor,
+        COALESCE(SUM(CASE
+            WHEN t.kind = 'INCOME' AND t.accountId = a.id THEN t.amountMinor
+            WHEN t.kind = 'EXPENSE' AND t.accountId = a.id THEN -t.amountMinor
+            WHEN t.kind = 'TRANSFER' AND t.fromAccountId = a.id THEN -t.amountMinor
+            WHEN t.kind = 'TRANSFER' AND t.toAccountId = a.id THEN t.amountMinor
+            ELSE 0 END), 0) AS movementMinor
+        FROM accounts a LEFT JOIN transactions t ON t.bookId = a.bookId AND t.deletedAt IS NULL
+            AND (t.accountId = a.id OR t.fromAccountId = a.id OR t.toAccountId = a.id)
+        WHERE a.bookId = 'default' GROUP BY a.id ORDER BY a.rowid""")
+    fun accountBalances(): Flow<List<AccountBalanceRow>>
 
     @Query("SELECT * FROM transactions WHERE id = :id") suspend fun get(id: String): TransactionEntity?
     @Insert suspend fun insert(transaction: TransactionEntity)

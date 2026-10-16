@@ -24,6 +24,7 @@ data class LedgerUiState(
     val categories: List<Category> = emptyList(), val accounts: List<Account> = emptyList(),
     val zoneId: String = ZoneId.systemDefault().id,
 )
+data class AssetsUiState(val loading: Boolean = true, val rows: List<AccountBalance> = emptyList(), val summary: AssetSummary = AssetSummary(), val error: String? = null)
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
@@ -36,6 +37,8 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
     val busy = mutableBusy.asStateFlow()
     private val mutableOverview = MutableStateFlow<LedgerOverview?>(null)
     val overview = mutableOverview.asStateFlow()
+    private val mutableAssets = MutableStateFlow(AssetsUiState())
+    val assets = mutableAssets.asStateFlow()
     private val mutableUndo = MutableStateFlow<UndoDeletion?>(null)
     val undo = mutableUndo.asStateFlow()
     private var undoTimer: Job? = null
@@ -45,6 +48,11 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
             try {
                 repository.initialize()
                 val zoneId = repository.bookZoneId()
+                launch {
+                    repository.accountBalances().map { AssetsUiState(false, it, AssetRules.summarize(it)) }
+                        .catch { emit(AssetsUiState(false, error = "资产读取失败，请重新打开应用。")) }
+                        .collect { mutableAssets.value = it }
+                }
                 launch { repository.overview(zoneId).catch { mutableOverview.value = null }.collect { mutableOverview.value = it } }
                 selection.value = selection.value.copy(month = YearMonth.now(ZoneId.of(zoneId)))
                 selection.flatMapLatest { current ->
@@ -77,6 +85,11 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
     }
     fun saveAccount(name: String, id: String?, onSaved: () -> Unit) = action {
         repository.saveAccount(name, id)
+        mutableMessage.value = "账户已保存。"
+        onSaved()
+    }
+    fun saveAccountDetails(name: String, openingBalanceMinor: Long?, id: String?, onSaved: () -> Unit) = action {
+        repository.saveAccountDetails(name, openingBalanceMinor, id)
         mutableMessage.value = "账户已保存。"
         onSaved()
     }

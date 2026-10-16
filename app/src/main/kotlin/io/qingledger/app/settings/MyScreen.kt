@@ -52,7 +52,7 @@ fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: ()
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MyQuick("资产与账户", LedgerIcons.Wallet, { panel = "assets" }, Modifier.weight(1f))
+                MyQuick("资产与账户", LedgerIcons.Wallet, onAccounts, Modifier.weight(1f))
                 MyQuick("分类管理", LedgerIcons.Other, onCategories, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -64,14 +64,10 @@ fun MyScreen(overview: LedgerOverview?, onCategories: () -> Unit, onAccounts: ()
             MyLink("关于轻账", "版本与更新记录", LedgerIcons.Entertainment) { panel = "about" }
         }
     }
-    val title = when (panel) { "assets" -> "资产与账户"; "data" -> "数据管理"; "book" -> "当前账本"; "about" -> "关于轻账"; else -> "更多" }
+    val title = when (panel) { "data" -> "数据管理"; "book" -> "当前账本"; "about" -> "关于轻账"; else -> "更多" }
     LedgerBottomSheet(panel != null, title, { panel = null }) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             when (panel) {
-                "assets" -> {
-                    Text("资产余额统计暂未实现，可先管理资金账户。", fontSize = 14.sp)
-                    Button(onClick = { panel = null; onAccounts() }, modifier = Modifier.fillMaxWidth()) { Text("管理账户") }
-                }
                 "data" -> Text("数据导入、导出和备份暂未实现，当前账单保存在本机。", fontSize = 14.sp)
                 "book" -> Text("当前使用日常账本，暂不支持新增或切换账本。", fontSize = 14.sp)
                 "about" -> {

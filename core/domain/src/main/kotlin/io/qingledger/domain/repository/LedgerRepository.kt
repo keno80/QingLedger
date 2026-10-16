@@ -23,6 +23,8 @@ interface LedgerRepository {
     fun transactions(filter: LedgerFilter): Flow<List<LedgerTransaction>>
     fun summary(period: PeriodRange): Flow<LedgerSummary>
     fun overview(zoneId: String): Flow<LedgerOverview>
+    fun accountBalances(): Flow<List<AccountBalance>>
+    suspend fun saveAccountDetails(name: String, openingBalanceMinor: Long?, id: String? = null): String
     suspend fun get(id: String): LedgerTransaction?
     fun changes(id: String): Flow<List<TransactionChange>>
     suspend fun saveCategory(name: String, kind: TransactionKind, id: String? = null): String

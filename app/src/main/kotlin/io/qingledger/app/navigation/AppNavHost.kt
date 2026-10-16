@@ -26,6 +26,7 @@ import io.qingledger.domain.model.LedgerTransaction
 import io.qingledger.designsystem.component.StatusCard
 import io.qingledger.app.settings.SettingsScreen
 import io.qingledger.app.settings.AppearanceScreen
+import io.qingledger.app.settings.AssetsScreen
 import io.qingledger.app.settings.ReferenceManagementScreen
 import io.qingledger.app.statistics.StatisticsScreen
 import io.qingledger.designsystem.component.LedgerIcons
@@ -45,6 +46,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     val stateHolder = rememberSaveableStateHolder()
     val state by ledger.state.collectAsStateWithLifecycle()
     val overview by ledger.overview.collectAsStateWithLifecycle()
+    val assets by ledger.assets.collectAsStateWithLifecycle()
     val searchState by searchLedger.state.collectAsStateWithLifecycle()
     val message by ledger.message.collectAsStateWithLifecycle()
     val busy by ledger.busy.collectAsStateWithLifecycle()
@@ -55,6 +57,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var session by rememberSaveable { mutableStateOf(0) }
     var referenceParent by rememberSaveable { mutableStateOf("list") }
+    var accountToEdit by rememberSaveable { mutableStateOf<String?>(null) }
     var transactionParent by rememberSaveable { mutableStateOf("list") }
     var editorCategoryManagement by rememberSaveable { mutableStateOf(false) }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
@@ -101,9 +104,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             ) {
                 if (screen != "list" || (route != AppRoute.LEDGER && route != AppRoute.SETTINGS)) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (screen in setOf("edit", "categories", "preferences", "appearance")) Box(Modifier.fillMaxWidth().height(44.dp)) {
+                        if (screen in setOf("edit", "categories", "preferences", "appearance", "assets", "accounts")) Box(Modifier.fillMaxWidth().height(44.dp)) {
                             IconButton(onClick = { if (!busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
-                            Text(when (screen) { "categories" -> "分类管理"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text(when (screen) { "categories" -> "分类管理"; "accounts" -> "账户管理"; "assets" -> "资产与账户"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
@@ -126,7 +129,10 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         val history by androidx.compose.runtime.remember(row.id) { ledger.changes(row.id) }.collectAsStateWithLifecycle(initialValue = emptyList())
                         TransactionDetailScreen(row, state, busy, { openEditor(row.id) }, { ledger.delete(row, ::closePage) }, history)
                     } }
-                    screen == "categories" || screen == "accounts" -> item { ReferenceManagementScreen(state, ledger, screen == "categories", busy, ::closePage, { pageScope.launch { pageState.animateScrollToItem(0) } }) }
+                    screen == "categories" || screen == "accounts" -> item { ReferenceManagementScreen(state, ledger, screen == "categories", busy, ::closePage, { pageScope.launch { pageState.animateScrollToItem(0) } }, accountToEdit) }
+                    screen == "assets" -> item { AssetsScreen(assets,
+                        { accountToEdit = null; referenceParent = "assets"; session++; screen = "accounts" },
+                        { accountToEdit = it; referenceParent = "assets"; session++; screen = "accounts" }) }
                     screen == "preferences" -> item { SettingsScreen(capture, { session++; screen = "automation" }, { session++; screen = "appearance" }) }
                     screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
@@ -135,7 +141,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     }
                     route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
                     route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) }
-                    else -> item { MyScreen(overview, { referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
+                    else -> item { MyScreen(overview, { referenceParent = "list"; session++; screen = "categories" }, { session++; screen = "assets" }, { session++; screen = "preferences" }) }
                 }
             }
         }

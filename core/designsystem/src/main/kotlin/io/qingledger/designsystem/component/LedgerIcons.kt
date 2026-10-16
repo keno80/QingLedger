@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.dp
 
 /** Original vector drawings; no image assets copied from the reference project. */
 object LedgerIcons {
+    fun forAccount(name: String): ImageVector = if (name.contains("银行") || name.contains("卡")) Housing else Wallet
     fun forCategory(name: String): ImageVector = when (name) {
         "餐饮", "美食", "饮食" -> Dining
         "交通" -> Transport
