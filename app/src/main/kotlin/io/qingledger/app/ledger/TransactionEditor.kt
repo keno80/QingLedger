@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.qingledger.designsystem.component.LedgerIcons
+import io.qingledger.designsystem.component.LedgerDatePicker
+import io.qingledger.designsystem.component.LedgerTimePicker
 import io.qingledger.designsystem.component.LedgerSegmentedControl
 import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.*
@@ -58,8 +60,9 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     var timeError by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingDate by rememberSaveable { mutableStateOf(date) }
     var pendingTime by rememberSaveable { mutableStateOf(time) }
+    var timePart by rememberSaveable { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
-    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; panel = value; timeError = null }
+    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; timePart = 0; panel = value; timeError = null }
     fun accountName(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
     fun parseTime(day: String = date, clock: String = time): LocalDateTime? = try { LocalDateTime.of(LocalDate.parse(day), LocalTime.parse(clock)) } catch (_: DateTimeParseException) { null }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -146,14 +149,19 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
         if (panel == "time") {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TextField(pendingDate, { pendingDate = it; timeError = null }, label = "日期（yyyy-MM-dd）", enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
-                TextField(pendingTime, { pendingTime = it; timeError = null }, label = "时间（HH:mm）", enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text("$pendingDate $pendingTime", fontSize = 16.sp)
+                LedgerSegmentedControl(listOf("日期", "时间"), timePart, { timePart = it }, enabled = !busy)
+                if (timePart == 0) LedgerDatePicker(LocalDate.parse(pendingDate), { pendingDate = it.toString(); timeError = null }, enabled = !busy)
+                else LedgerTimePicker(LocalTime.parse(pendingTime), { pendingTime = it.format(DateTimeFormatter.ofPattern("HH:mm")); timeError = null }, enabled = !busy)
                 timeError?.let { Text(it, fontSize = 13.sp, color = LedgerColors.expense) }
-                Button(onClick = {
-                    val parsed = parseTime(pendingDate, pendingTime)
-                    timeError = when { parsed == null -> "日期或时间格式不正确。"; zone.rules.getValidOffsets(parsed).isEmpty() -> "该时间在所选时区不存在。"; else -> null }
-                    if (timeError == null) { date = pendingDate; time = pendingTime; focus.clearFocus(); panel = null; error = null }
-                }, enabled = !busy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("完成") }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { panel = null }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("取消") }
+                    Button(onClick = {
+                        val parsed = parseTime(pendingDate, pendingTime)
+                        timeError = when { parsed == null -> "日期或时间格式不正确。"; zone.rules.getValidOffsets(parsed).isEmpty() -> "该时间在所选时区不存在。"; else -> null }
+                        if (timeError == null) { date = pendingDate; time = pendingTime; focus.clearFocus(); panel = null; error = null }
+                    }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确定") }
+                }
             }
         } else {
             val choices = listOf(null to if (panel == "account") "未指定账户" else "请选择") + state.accounts.filter { !it.archived || it.id == previous?.accountId || it.id == previous?.fromAccountId || it.id == previous?.toAccountId }.map { it.id to (it.name + if (it.archived) "（已归档）" else "") }
