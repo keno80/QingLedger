@@ -40,7 +40,8 @@ class MainActivity : ComponentActivity() {
                 val searchLedger: LedgerViewModel = viewModel(key = "ledger-search", factory = LedgerViewModel.Factory(container.ledgerRepository))
                 val capture: CaptureViewModel = viewModel(factory = CaptureViewModel.Factory(container.captureRepository, container.captureRuntime))
                 val data: DataManagementViewModel = viewModel(factory = DataManagementViewModel.Factory(container.backupRepository, applicationContext.contentResolver, container.csvExportRepository))
-                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, searchLedger = searchLedger, capture = capture, data = data)
+                val csvImport: io.qingledger.app.settings.CsvImportViewModel = viewModel(factory = io.qingledger.app.settings.CsvImportViewModel.Factory(container.csvImportRepository, applicationContext.contentResolver))
+                AppNavHost(themeMode = mode, settingsRepository = settings, ledger = ledger, searchLedger = searchLedger, capture = capture, data = data, csvImport = csvImport)
             }
         }
     }

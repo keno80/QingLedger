@@ -19,7 +19,7 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewModel, externalBusy: Boolean) {
+fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewModel, externalBusy: Boolean, onCsvImport: () -> Unit) {
     val state by data.state.collectAsStateWithLifecycle()
     val captureMessage by capture.message.collectAsStateWithLifecycle()
     val enabled = !state.busy && !externalBusy
@@ -68,7 +68,7 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
                 "import" -> SettingsSection {
                     SettingsNavigationRow("微信支付", "选择导出的账单文件", LedgerIcons.Wallet, { info = "微信账单导入暂未实现。" })
                     SettingsNavigationRow("支付宝", "选择导出的账单文件", LedgerIcons.Wallet, { info = "支付宝账单导入暂未实现。" })
-                    SettingsNavigationRow("轻账 CSV", "选择标准账单文件", LedgerIcons.Ledger, { info = "CSV 账单导入暂未实现。" })
+                    SettingsNavigationRow("轻账 CSV", "选择标准账单文件", LedgerIcons.Ledger, { panel = null; onCsvImport() })
                 }
                 else -> {
                     Text("只隐藏已入账、跳过或关联等已处理事件；账单与重复抑制信息仍保留。", fontSize = 14.sp)

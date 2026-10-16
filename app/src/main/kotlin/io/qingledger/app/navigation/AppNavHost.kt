@@ -29,6 +29,8 @@ import io.qingledger.app.settings.AppearanceScreen
 import io.qingledger.app.settings.AssetsScreen
 import io.qingledger.app.settings.DataManagementScreen
 import io.qingledger.app.settings.DataManagementViewModel
+import io.qingledger.app.settings.CsvImportViewModel
+import io.qingledger.app.settings.csvImportPage
 import androidx.compose.runtime.LaunchedEffect
 import io.qingledger.app.settings.ReferenceManagementScreen
 import io.qingledger.app.statistics.StatisticsScreen
@@ -43,7 +45,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, capture: CaptureViewModel, data: DataManagementViewModel) {
+fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, capture: CaptureViewModel, data: DataManagementViewModel, csvImport: CsvImportViewModel) {
     var savedRoute by rememberSaveable { mutableStateOf(AppRoute.LEDGER.name) }
     val route = AppRoute.fromSavedValue(savedRoute)
     val stateHolder = rememberSaveableStateHolder()
@@ -51,6 +53,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     val overview by ledger.overview.collectAsStateWithLifecycle()
     val assets by ledger.assets.collectAsStateWithLifecycle()
     val dataState by data.state.collectAsStateWithLifecycle()
+    val importState by csvImport.state.collectAsStateWithLifecycle()
     val searchState by searchLedger.state.collectAsStateWithLifecycle()
     val message by ledger.message.collectAsStateWithLifecycle()
     val busy by ledger.busy.collectAsStateWithLifecycle()
@@ -70,8 +73,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     }
     fun closePage() {
         if (screen == "data") data.cancelPreview()
+        if (screen == "csvimport") csvImport.reset()
         if (screen != "list") stateHolder.removeState(if (screen == "search") "ledger-search" else "$screen-$selectedId-$session")
-        screen = when (screen) { "candidate" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
+        screen = when (screen) { "csvimport" -> "data"; "candidate" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
         selectedId = null
     }
     fun openEditor(id: String?) { if (id == null) transactionParent = "list"; selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
@@ -82,7 +86,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     }
 
     BackHandler(enabled = screen != "list" || route != AppRoute.LEDGER) {
-        if (!busy && !captureBusy && !dataState.busy) { if (screen != "list") closePage() else savedRoute = AppRoute.LEDGER.name }
+        if (!busy && !captureBusy && !dataState.busy && !importState.busy) { if (screen != "list") closePage() else savedRoute = AppRoute.LEDGER.name }
     }
 
     Scaffold(
@@ -113,9 +117,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             ) {
                 if (screen != "list" || (route != AppRoute.LEDGER && route != AppRoute.SETTINGS)) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (screen in setOf("edit", "categories", "preferences", "appearance", "assets", "accounts", "data")) Box(Modifier.fillMaxWidth().height(44.dp)) {
-                            IconButton(onClick = { if (!busy && !captureBusy && !dataState.busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
-                            Text(when (screen) { "data" -> "数据管理"; "categories" -> "分类管理"; "accounts" -> "账户管理"; "assets" -> "资产与账户"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                        if (screen in setOf("edit", "categories", "preferences", "appearance", "assets", "accounts", "data", "csvimport")) Box(Modifier.fillMaxWidth().height(44.dp)) {
+                            IconButton(onClick = { if (!busy && !captureBusy && !dataState.busy && !importState.busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
+                            Text(when (screen) { "csvimport" -> "导入账单"; "data" -> "数据管理"; "categories" -> "分类管理"; "accounts" -> "账户管理"; "assets" -> "资产与账户"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
@@ -144,7 +148,8 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         { accountToEdit = it; referenceParent = "assets"; session++; screen = "accounts" }) }
                     screen == "preferences" -> item { SettingsScreen(capture, { session++; screen = "automation" }, { session++; screen = "appearance" }) }
                     screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
-                    screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy) }
+                    screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy || importState.busy) { csvImport.reset(); session++; screen = "csvimport" } }
+                    screen == "csvimport" -> csvImportPage(importState, csvImport)
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture) }
                         captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }

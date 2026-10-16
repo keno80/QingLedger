@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface LedgerDao {
+    @Query("SELECT id FROM transactions WHERE id IN (:ids)") suspend fun existingImportIds(ids: List<String>): List<String>
     @Query("""SELECT t.*, c.name AS categoryName, a.name AS accountName,
         f.name AS fromAccountName, dest.name AS toAccountName
         FROM transactions t LEFT JOIN categories c ON c.id=t.categoryId

@@ -47,26 +47,30 @@ interface CsvExportRepository {
 }
 
 object LedgerCsv {
-    private val headers = listOf("账单ID", "交易时间", "时区", "收支类型", "金额（元）", "币种", "分类", "资金账户", "转出账户", "转入账户", "商户", "备注", "来源应用")
+    val baseHeaders = listOf("账单ID", "交易时间", "时区", "收支类型", "金额（元）", "币种", "分类", "资金账户", "转出账户", "转入账户", "商户", "备注", "来源应用")
+    val headers = baseHeaders + "文本转义"
 
     fun write(writer: Writer, rows: Iterable<LedgerCsvRow>) {
         writer.write("\uFEFF")
         writeRow(writer, headers)
         rows.forEach { row ->
             val time = DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(Instant.ofEpochMilli(row.occurredAt).atZone(ZoneId.of(row.zoneId)))
-            writeRow(writer, listOf(row.id, time, row.zoneId, row.kind.label, BigDecimal.valueOf(row.amountMinor, 2).toPlainString(),
-                row.currency, row.category, row.account, row.fromAccount, row.toAccount, row.merchant, row.note, row.sourcePackage))
+            val values = listOf(row.id, time, row.zoneId, row.kind.label, BigDecimal.valueOf(row.amountMinor, 2).toPlainString(),
+                row.currency, row.category, row.account, row.fromAccount, row.toAccount, row.merchant, row.note, row.sourcePackage)
+            val protected = values.mapIndexedNotNull { index, value -> index.takeIf { needsProtection(value) } }.joinToString(";")
+            writeRow(writer, values + "v2:$protected")
         }
     }
 
     private fun writeRow(writer: Writer, values: List<String>) {
         values.forEachIndexed { index, value ->
             if (index > 0) writer.write(",")
-            val guarded = if (value.firstOrNull() in listOf('\t', '\r', '\n') || value.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'$value" else value
+            val guarded = if (needsProtection(value)) "'$value" else value
             writer.write("\"")
             writer.write(guarded.replace("\"", "\"\""))
             writer.write("\"")
         }
         writer.write("\r\n")
     }
+    fun needsProtection(value: String): Boolean = value.firstOrNull() in listOf('\t', '\r', '\n') || value.trimStart().firstOrNull() in listOf('=', '+', '-', '@')
 }

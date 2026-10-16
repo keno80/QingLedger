@@ -72,6 +72,7 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
                 history.sortedByDescending { it.occurredAt }.forEachIndexed { index, change ->
                     val title = when {
                         change.operation == "CREATE" -> "新增账单"
+                        change.operation == "IMPORT_CSV" -> "导入账单"
                         change.operation == "DELETE" -> "删除账单"
                         change.operation == "RESTORE" -> "撤销删除"
                         change.operation.startsWith("EDIT:") -> "修改" + change.operation.substringAfter(':')

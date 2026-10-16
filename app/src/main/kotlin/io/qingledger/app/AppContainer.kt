@@ -20,6 +20,7 @@ class AppContainer(context: Context) {
     private val database = LedgerDatabase.create(context)
     val ledgerRepository: LedgerRepository = RoomLedgerRepository(database)
     val csvExportRepository = RoomCsvExportRepository(database)
+    val csvImportRepository = io.qingledger.data.repository.RoomCsvImportRepository(database)
     private val accessibilitySources = setOf("com.eg.android.AlipayGphone", "com.tencent.mm") + if (BuildConfig.DEBUG) setOf("io.qingledger.paymentsimulator") else emptySet()
     private val captureSources = accessibilitySources + if (BuildConfig.DEBUG) setOf("com.android.shell") else emptySet()
     val captureRepository: CaptureRepository = RoomCaptureRepository(database, ledgerRepository, captureSources)
