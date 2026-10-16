@@ -28,6 +28,12 @@ object LedgerIcons {
     val Health = icon("Health") { moveTo(12f, 2f); lineTo(20f, 6f); lineTo(19f, 15f); curveTo(19f, 19f, 12f, 22f, 12f, 22f); curveTo(12f, 22f, 5f, 19f, 5f, 15f); lineTo(4f, 6f); close(); moveTo(12f, 7f); lineTo(12f, 15f); moveTo(8f, 11f); lineTo(16f, 11f) }
     val Other = icon("Other") { moveTo(3f, 4f); lineTo(13f, 4f); lineTo(22f, 13f); lineTo(13f, 22f); lineTo(3f, 12f); close(); moveTo(7f, 8f); lineTo(7.2f, 8f); moveTo(11f, 9f); lineTo(17f, 15f) }
     val Add = icon("Add") { moveTo(12f, 5f); lineTo(12f, 19f); moveTo(5f, 12f); lineTo(19f, 12f) }
+    val Wallet = icon("Wallet") { moveTo(19f, 7f); lineTo(5f, 7f); curveTo(2f, 7f, 2f, 3f, 5f, 3f); lineTo(18f, 3f); lineTo(18f, 7f); moveTo(3f, 5f); lineTo(3f, 19f); lineTo(21f, 19f); lineTo(21f, 7f); lineTo(19f, 7f); moveTo(21f, 11f); lineTo(15f, 11f); lineTo(15f, 15f); lineTo(21f, 15f) }
+    val Database = icon("Database") { moveTo(4f, 5f); curveTo(4f, 1f, 20f, 1f, 20f, 5f); curveTo(20f, 9f, 4f, 9f, 4f, 5f); lineTo(4f, 19f); curveTo(4f, 23f, 20f, 23f, 20f, 19f); lineTo(20f, 5f); moveTo(4f, 12f); curveTo(4f, 16f, 20f, 16f, 20f, 12f) }
+    val Gear = icon("Gear") {
+        moveTo(9f, 3f); lineTo(15f, 3f); lineTo(16f, 6f); lineTo(19f, 6f); lineTo(22f, 11f); lineTo(20f, 14f); lineTo(20f, 17f); lineTo(15f, 21f); lineTo(12f, 19f); lineTo(9f, 21f); lineTo(4f, 18f); lineTo(4f, 14f); lineTo(2f, 11f); lineTo(5f, 6f); lineTo(8f, 6f); close()
+        moveTo(16f, 12f); curveTo(16f, 17.3f, 8f, 17.3f, 8f, 12f); curveTo(8f, 6.7f, 16f, 6.7f, 16f, 12f)
+    }
     val Back = icon("Back") { moveTo(15f, 5f); lineTo(8f, 12f); lineTo(15f, 19f) }
     val Next = icon("Next") { moveTo(9f, 5f); lineTo(16f, 12f); lineTo(9f, 19f) }
     val Search = icon("Search") { moveTo(16f, 16f); lineTo(21f, 21f); moveTo(11f, 3f); curveTo(21f, 3f, 21f, 18f, 11f, 18f); curveTo(1f, 18f, 1f, 3f, 11f, 3f) }

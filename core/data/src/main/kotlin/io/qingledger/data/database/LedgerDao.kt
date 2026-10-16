@@ -39,6 +39,9 @@ interface LedgerDao {
         FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL AND occurredAt >= :start AND occurredAt < :end""")
     fun summary(start: Long, end: Long): Flow<SummaryRow>
 
+    @Query("SELECT occurredAt FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL")
+    fun recordedTimes(): Flow<List<Long>>
+
     @Query("SELECT * FROM transactions WHERE id = :id") suspend fun get(id: String): TransactionEntity?
     @Insert suspend fun insert(transaction: TransactionEntity)
     @Update suspend fun update(transaction: TransactionEntity)

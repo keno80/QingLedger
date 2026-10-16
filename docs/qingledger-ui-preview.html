@@ -1497,6 +1497,7 @@ svg.lucide {
 }
 
 html&gt;body{padding:0}&lt;/style&gt;
+&lt;!-- 0.7.11: 我的页按已确认设计实现；设计中的统计为示例，App 使用全账本真实数据。资产统计、数据管理和多账本尚未实现，App 保留原入口并说明状态。 --&gt;
 &lt;/head&gt;
 &lt;body&gt;
 &lt;script type=&quot;application/json&quot; id=&quot;codex-visualization-widget-state&quot;&gt;__CODEX_VISUALIZATION_WIDGET_STATE__&lt;/script&gt;
@@ -2010,7 +2011,7 @@ html&gt;body{padding:0}&lt;/style&gt;
   if(key===&#x27;mocksave&#x27;||key===&#x27;mockarchive&#x27;){closeSheet();toast(key===&#x27;mocksave&#x27;?&#x27;设计预览：已保存&#x27;:&#x27;设计预览：已归档&#x27;);return;}
   if(key===&#x27;clean&#x27;){sheet(&#x27;数据清理&#x27;,`&lt;p class=&quot;ql-note&quot;&gt;先选择范围，再确认删除。此预览不会删除真实数据。&lt;/p&gt;${button(&#x27;选择清理范围&#x27;,&#x27;planned&#x27;,&#x27;ql-button ql-secondary&#x27;)}`);return;}
   if(key===&#x27;devtools&#x27;){sheet(&#x27;开发者工具&#x27;,card(row(&#x27;测试器来源&#x27;,&#x27;仅 Debug 版展示&#x27;,&#x27;scan&#x27;,&#x27;mocksave&#x27;)+row(&#x27;诊断信息&#x27;,&#x27;授权后查看最小诊断信息&#x27;,&#x27;settings&#x27;,&#x27;mocksave&#x27;),true));return;}
-  const messages={month:&#x27;设计预览：月份选择&#x27;,search:&#x27;在搜索框中输入商户或备注&#x27;,more:&#x27;更多操作&#x27;,unavailable:&#x27;该方式尚未接入，不能开启&#x27;,scope:&#x27;付款前读取选中账户，成功后才生成账单&#x27;,privacy:&#x27;财务数据保存在本机，按来源授权&#x27;,accounthelp:&#x27;渠道与资金账户分开，未知账户保留未指定&#x27;,permission:&#x27;设计预览：进入系统权限配置&#x27;,planned:&#x27;此功能为规划页面，尚未实现&#x27;,restore:&#x27;设计预览：项目已恢复&#x27;,about:&#x27;轻账 · 本地优先的自动记账&#x27;,book:&#x27;日常账本 · 默认账本&#x27;,hideevents:&#x27;设计预览：已隐藏处理完的采集记录&#x27;,logdetail:&#x27;只展示结构化结果，不显示页面原文&#x27;,color:&#x27;可通过主题控件调整主色&#x27;,display:&#x27;紧凑行展示商户、账户与来源&#x27;,logfilter:&#x27;设计预览：采集记录筛选&#x27;};
+  const messages={month:&#x27;设计预览：月份选择&#x27;,search:&#x27;在搜索框中输入商户或备注&#x27;,more:&#x27;更多操作&#x27;,unavailable:&#x27;该方式尚未接入，不能开启&#x27;,scope:&#x27;付款前读取选中账户，成功后才生成账单&#x27;,privacy:&#x27;财务数据保存在本机，按来源授权&#x27;,accounthelp:&#x27;渠道与资金账户分开，未知账户保留未指定&#x27;,permission:&#x27;设计预览：进入系统权限配置&#x27;,planned:&#x27;此功能为规划页面，尚未实现&#x27;,restore:&#x27;设计预览：项目已恢复&#x27;,about:&#x27;轻账 0.7.11 · 本地优先的自动记账&#x27;,book:&#x27;日常账本 · 默认账本&#x27;,hideevents:&#x27;设计预览：已隐藏处理完的采集记录&#x27;,logdetail:&#x27;只展示结构化结果，不显示页面原文&#x27;,color:&#x27;可通过主题控件调整主色&#x27;,display:&#x27;紧凑行展示商户、账户与来源&#x27;,logfilter:&#x27;设计预览：采集记录筛选&#x27;};
   toast(messages[key]||&#x27;设计预览&#x27;);
  }
  select.innerHTML=Object.entries(pages).map(([key,title])=&gt;`&lt;option value=&quot;${key}&quot;&gt;${title}&lt;/option&gt;`).join(&#x27;&#x27;);

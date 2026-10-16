@@ -43,6 +43,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     val route = AppRoute.fromSavedValue(savedRoute)
     val stateHolder = rememberSaveableStateHolder()
     val state by ledger.state.collectAsStateWithLifecycle()
+    val overview by ledger.overview.collectAsStateWithLifecycle()
     val searchState by searchLedger.state.collectAsStateWithLifecycle()
     val message by ledger.message.collectAsStateWithLifecycle()
     val busy by ledger.busy.collectAsStateWithLifecycle()
@@ -97,7 +98,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (showBottomBar) 132.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(if (screen == "search" || (screen == "list" && route == AppRoute.LEDGER)) 0.dp else 16.dp),
             ) {
-                if (screen != "list" || route != AppRoute.LEDGER) item(key = "header") {
+                if (screen != "list" || (route != AppRoute.LEDGER && route != AppRoute.SETTINGS)) item(key = "header") {
                     Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (screen == "edit" || screen == "categories") Box(Modifier.fillMaxWidth().height(44.dp)) {
                             IconButton(onClick = { if (!busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
@@ -132,7 +133,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     }
                     route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
                     route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) }
-                    else -> item { MyScreen({ referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
+                    else -> item { MyScreen(overview, { referenceParent = "list"; session++; screen = "categories" }, { referenceParent = "list"; session++; screen = "accounts" }, { session++; screen = "preferences" }) }
                 }
             }
         }

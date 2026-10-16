@@ -34,6 +34,8 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
     val message = mutableMessage.asStateFlow()
     private val mutableBusy = MutableStateFlow(false)
     val busy = mutableBusy.asStateFlow()
+    private val mutableOverview = MutableStateFlow<LedgerOverview?>(null)
+    val overview = mutableOverview.asStateFlow()
     private val mutableUndo = MutableStateFlow<UndoDeletion?>(null)
     val undo = mutableUndo.asStateFlow()
     private var undoTimer: Job? = null
@@ -43,6 +45,7 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
             try {
                 repository.initialize()
                 val zoneId = repository.bookZoneId()
+                launch { repository.overview(zoneId).catch { mutableOverview.value = null }.collect { mutableOverview.value = it } }
                 selection.value = selection.value.copy(month = YearMonth.now(ZoneId.of(zoneId)))
                 selection.flatMapLatest { current ->
                     val period = LedgerRules.period(current.month, ZoneId.of(zoneId))

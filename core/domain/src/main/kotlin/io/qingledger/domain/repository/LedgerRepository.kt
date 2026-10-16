@@ -12,6 +12,7 @@ data class LedgerFilter(
     val limit: Int = 50,
 )
 data class UndoDeletion(val id: String, val revision: Int, val expiresAt: Long)
+data class LedgerOverview(val recordedCount: Int = 0, val recordedDays: Int = 0)
 class LedgerConflict : IllegalStateException("账单已被修改，请返回列表重新打开。")
 
 interface LedgerRepository {
@@ -21,6 +22,7 @@ interface LedgerRepository {
     val accounts: Flow<List<Account>>
     fun transactions(filter: LedgerFilter): Flow<List<LedgerTransaction>>
     fun summary(period: PeriodRange): Flow<LedgerSummary>
+    fun overview(zoneId: String): Flow<LedgerOverview>
     suspend fun get(id: String): LedgerTransaction?
     fun changes(id: String): Flow<List<TransactionChange>>
     suspend fun saveCategory(name: String, kind: TransactionKind, id: String? = null): String
