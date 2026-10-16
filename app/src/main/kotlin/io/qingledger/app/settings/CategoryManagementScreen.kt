@@ -10,7 +10,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import io.qingledger.app.ledger.LedgerUiState
 import io.qingledger.app.ledger.LedgerViewModel
 import io.qingledger.designsystem.component.LedgerIcons
+import io.qingledger.designsystem.component.LedgerSegmentedControl
 import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.ReferenceRules
 import io.qingledger.domain.model.TransactionKind
@@ -116,13 +116,6 @@ internal fun CategoryManagementScreen(state: LedgerUiState, ledger: LedgerViewMo
 
 @Composable
 private fun CategoryKindSelector(value: String, enabled: Boolean, onSelect: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MiuixTheme.colorScheme.background).padding(4.dp)) {
-        listOf(TransactionKind.EXPENSE, TransactionKind.INCOME).forEach { kind ->
-            val active = value == kind.name
-            Button(onClick = { onSelect(kind.name) }, enabled = enabled, modifier = Modifier.weight(1f).height(34.dp).semantics { selected = active }, minHeight = 34.dp, minWidth = 0.dp,
-                insideMargin = PaddingValues(0.dp), cornerRadius = 10.dp, colors = ButtonDefaults.buttonColors(color = if (active) MiuixTheme.colorScheme.surfaceContainer else androidx.compose.ui.graphics.Color.Transparent)) {
-                Text(kind.label, fontSize = 12.sp, color = if (active) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            }
-        }
-    }
+    val kinds = listOf(TransactionKind.EXPENSE, TransactionKind.INCOME)
+    LedgerSegmentedControl(kinds.map { it.label }, kinds.indexOfFirst { it.name == value }, { onSelect(kinds[it].name) }, enabled = enabled)
 }

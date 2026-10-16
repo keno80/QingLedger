@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.qingledger.designsystem.component.LedgerIcons
+import io.qingledger.designsystem.component.LedgerSegmentedControl
 import io.qingledger.designsystem.theme.LedgerColors
 import io.qingledger.domain.model.*
 import java.math.BigDecimal
@@ -63,16 +64,11 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     fun parseTime(day: String = date, clock: String = time): LocalDateTime? = try { LocalDateTime.of(LocalDate.parse(day), LocalTime.parse(clock)) } catch (_: DateTimeParseException) { null }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(18.dp)) {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MiuixTheme.colorScheme.background).padding(4.dp)) {
-                TransactionKind.entries.forEach { next ->
-                    val active = kindSelected && kind == next
-                    Button(onClick = { if (kind != next) category = null; kindName = next.name; kindSelected = true; error = null }, enabled = !busy,
-                        modifier = Modifier.weight(1f).height(32.dp).semantics { selected = active }, minWidth = 0.dp, minHeight = 32.dp,
-                        cornerRadius = 10.dp, insideMargin = PaddingValues(0.dp), colors = ButtonDefaults.buttonColors(color = if (active) MiuixTheme.colorScheme.surfaceContainer else Color.Transparent)) {
-                        Text(next.label, fontSize = 12.sp, color = if (active) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    }
-                }
-            }
+            LedgerSegmentedControl(TransactionKind.entries.map { it.label }, if (kindSelected) kind.ordinal else -1, { index ->
+                val next = TransactionKind.entries[index]
+                if (kind != next) category = null
+                kindName = next.name; kindSelected = true; error = null
+            }, enabled = !busy)
             Row(Modifier.fillMaxWidth().heightIn(min = 96.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 Text("¥", fontSize = 22.sp)
                 Box(Modifier.widthIn(max = 220.dp).weight(1f, fill = false)) {
