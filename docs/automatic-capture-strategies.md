@@ -1,0 +1,39 @@
+# 空节点页面的自动记账方案
+
+调研日期：2026-10-21。当前轻账的真实微信成功页只返回两个 FrameLayout 容器，没有文字；节点事件送达不等于交易内容可读取。
+
+## 公开项目参考
+
+| 路线 | 参考 | 优点与限制 |
+| --- | --- | --- |
+| 无障碍截图 + OCR | [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting)、[AutoBook](https://github.com/Skybaby-T/AutoBook) | 不要求页面暴露文字节点。仍受截图能力、窗口保护、识别准确率和页面停留时间影响；AutoBook 明确说明自动截图是骨架，不是可用性保证。 |
+| Shizuku / Root 截图 + OCR | [AutoAccounting 工作模式](https://github.com/AutoAccountingOrg/AutoAccounting#-工作模式) | 为图像获取提供其他通道，复用 OCR 和交易规则；Shizuku 授权不会自动补全微信节点，也不等于注入微信进程。 |
+| Xposed / LSPosed Hook | [AutoAccounting](https://github.com/AutoAccountingOrg/AutoAccounting) | 直接读取应用内部交易数据，需要独立模块、框架和微信版本适配。普通 Root 授权不等于已经实现 Hook。 |
+| 交易通知 | [WhereIsMyMoney](https://github.com/FridayKoi/WhereIsMyMoney) | 绕过页面识别；只有系统实际交付足够明确的交易通知时可用，不能假定每次微信付款都会产生可读取通知。 |
+| 账单导入 | 轻账现有微信 / 支付宝导入 | 可补漏和核对，不是实时自动采集。 |
+
+以上为项目公开说明与官方接口调研，未在本次微信页面安装这些项目做横向实测，不能据此保证当前设备可用。不复制第三方实现；后续如引入代码需先核对其许可。
+
+## 已选择的实施顺序
+
+1. **无障碍图像获取已验证**：节点为空时调用 Android 正式截图接口，诊断区分授权缺失、安全窗口、窗口失效、超时和取得图像；已在当前手机取得真实微信页面图像。
+2. **微信付款成功页本地 OCR 已接入**：使用随 APK 打包的中文模型，结合成功状态、金额位置和字号、营销区域边界判断。复用原规则、已有账户上下文和入账队列；真实页面已自动新增一笔支出，同一运行会话重复读取未新增账单。其他 OCR 页面模板继续按实际样例适配。
+3. Shizuku / Root 截图后端后续单独实现；Hook 作为更高权限的独立扩展。通知始终作为可选补充来源。
+
+## 无障碍截图与 OCR 设计
+
+- 只在自动记账开启、无障碍方式生效、来源开启、当前同屏聚焦应用根明确属于该来源且读取为空时尝试。锁屏或熄屏不截取。
+- Android 14+ 优先 `takeScreenshotOfWindow`；Android 11–13 使用 `takeScreenshot`。前后复查窗口和配置代次；发生切换则丢弃结果。
+- 同一来源 / 屏幕 / 窗口 2 秒限频，节点事件到达过早时最多短暂等待窗口聚焦；没有后台定时截图循环。截图验证单次 5 秒超时，包含 OCR 时总计 10 秒，模型处理结束后释放资源，不尝试绕过安全窗口。
+- 图像只在内存中检查并交给本地 OCR，不保存或上传。少量像素差异仅用于排除明显纯色画面，不代表 OCR 一定可用。页面原文不进入诊断或日志，交给原入账链路的只是校验后的成功状态和金额。
+- 明确的付款成功状态必须位于页面上方，金额必须唯一、位于其下方有限区域，并排除后续营销区域。币符号被识别为 Y 时仅转换完整金额行；符号被漏读时要求唯一的大字号金额与成功状态对齐。成功图标被识别成单个大写字母时也必须同时满足大字号金额条件，额外中文、普通数字和多字母前缀不作成功标识。
+- 系统提供明确聊天或图片查看器类型时不执行 OCR 入账；Lite 页面无法提供 Activity 类型时使用视觉条件。无法从图像绝对证明交易刚发生，也无法完全识别未知容器中展示的旧成功截图，不宣称所有微信版本均适配。
+- 保留 miuix 诊断面板，仅扩展状态文案；不新增独立页面，不修改 `isAccessibilityTool`，系统授权由用户手动完成。
+
+官方依据：[AccessibilityService 截图 API](https://developer.android.com/reference/android/accessibilityservice/AccessibilityService)、[服务能力声明](https://developer.android.com/reference/android/accessibilityservice/AccessibilityServiceInfo)。无障碍截图能力自 API 30 提供，指定窗口 API 自 API 34 提供，安全窗口可能返回 `ERROR_TAKE_SCREENSHOT_SECURE_WINDOW`。
+
+中文模型依据：[ML Kit Android 文字识别](https://developers.google.com/ml-kit/vision/text-recognition/v2/android)，使用 bundled `com.google.mlkit:text-recognition-chinese:16.0.1`，不等待 Google Play 服务下载模型。
+
+## 当前边界
+
+OCR 新路径只适配微信付款支出成功页。支付宝仍以明确到账通知入账；OCR 退款、收入、付款方式选择与商户提取尚未补齐。没有可信账户上下文时保留未指定账户，不按成功页推测零钱或银行卡。当前去重沿用运行会话，尚不能凭无订单号画面可靠区分跨重启重复打开的旧页和新一笔同额付款。验收见 [无障碍 OCR 验收](accessibility-ocr-2026-10-21.md)。

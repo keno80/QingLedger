@@ -5,7 +5,7 @@ data class CaptureDiagnostic(val sourcePackage: String, val at: Long, val stage:
 
 object CaptureDiagnosticLabels {
     fun stage(value: String): String = when (value) {
-        "EVENT" -> "收到事件"; "READ" -> "页面读取"; "RULE" -> "规则判断"; "SAVE" -> "入账处理"; else -> "采集状态"
+        "EVENT" -> "收到事件"; "READ" -> "页面读取"; "IMAGE" -> "截图验证"; "OCR" -> "文字识别"; "RULE" -> "规则判断"; "SAVE" -> "入账处理"; else -> "采集状态"
     }
     fun reason(value: String): String = when (value) {
         "WINDOW_EVENT" -> "收到页面变化事件"
@@ -20,6 +20,23 @@ object CaptureDiagnosticLabels {
         "ROOT_UNAVAILABLE" -> "无法获取当前页面节点"
         "SOURCE_MISMATCH" -> "当前窗口不属于事件来源"
         "READ_FAILED" -> "读取页面发生异常"
+        "SCREENSHOT_REQUESTED" -> "节点为空，尝试获取页面图像"
+        "SCREENSHOT_READY" -> "已取得页面图像"
+        "OCR_BUSY" -> "上一次文字识别仍在处理，跳过本次"
+        "OCR_FAILED" -> "本地文字识别失败"
+        "OCR_TIMEOUT" -> "本地文字识别超时"
+        "OCR_UNSUPPORTED_PAGE" -> "当前页面类型尚未适配自动文字识别"
+        "SCREENSHOT_UNIFORM" -> "图像近似纯色，暂不能确认可识别内容"
+        "SCREENSHOT_STALE" -> "窗口或采集配置已变化，图像已丢弃"
+        "SCREENSHOT_NOT_READY" -> "当前屏幕或来源窗口未就绪"
+        "SCREENSHOT_NO_CAPABILITY" -> "截图能力未生效，请重新开启无障碍服务"
+        "SCREENSHOT_NO_ACCESS" -> "系统未允许无障碍截图"
+        "SCREENSHOT_SECURE" -> "页面受安全保护，系统拒绝截图"
+        "SCREENSHOT_RATE_LIMIT" -> "系统截图过于频繁，已停止本次尝试"
+        "SCREENSHOT_INVALID_TARGET" -> "截图窗口或屏幕已失效"
+        "SCREENSHOT_TIMEOUT" -> "截图请求超时"
+        "SCREENSHOT_TOO_LARGE" -> "图像尺寸超过内存处理限制"
+        "SCREENSHOT_FAILED" -> "页面图像获取失败"
         "PAYMENT_IN_PROGRESS" -> "仍在确认付款或选择付款方式"
         "HISTORY_PAGE" -> "历史、列表或聊天记录不自动入账"
         "TRANSFER_REVIEW" -> "转账、充值、提现或还款暂不自动入账"

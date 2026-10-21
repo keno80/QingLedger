@@ -18,19 +18,24 @@ class LedgerAccessibilityService : AccessibilityService() {
     private var activePage: String? = null
     private var session = ""
     private val paymentCache = PaymentSessionCache()
+    private val screenshotGate = AccessibilityScreenshotGate(cooldownMs = 2_000)
     private var activeAccount: String? = null
+    private var pageWindow = -1
+    private var pageClass: String? = null
 
     override fun onServiceConnected() { super.onServiceConnected(); runtime.accessibilityConnectionChanged(true) }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val source = event?.packageName?.toString() ?: return
         runtime.accessibilityEventReceived(source, event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED)
-        if (!runtime.acceptsAccessibility(source)) { activePage = null; paymentCache.clear(); pending?.cancel(); return }
+        if (!runtime.acceptsAccessibility(source)) { activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); pending?.cancel(); return }
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             val notice = event.parcelableData as? Notification
             if (notice != null) runtime.accessibilityNotificationPosted(source, notice, event.eventTime)
             else runtime.diagnostic(source, "READ", "NOTICE_PAYLOAD_UNAVAILABLE")
             return
         }
+        if (pageWindow != event.windowId) { pageWindow = event.windowId; pageClass = null }
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.className?.toString()?.startsWith("com.tencent.mm.") == true) pageClass = event.className.toString()
         if (pending?.isActive == true) return
         val eventWindow = event.windowId
         val eventDisplay = event.displayId
@@ -65,9 +70,14 @@ class LedgerAccessibilityService : AccessibilityService() {
                 val chosen = AccessibilityWindowRules.choose(readings)
                 val reading = chosen.reading ?: run { runtime.diagnostic(source, "READ", chosen.decision.reason); paymentCache.clear(); return@launch }
                 val snapshot = reading.snapshot
-                val text = snapshot.text
+                var text = snapshot.text
                 runtime.diagnostic(source, "READ", "PAGE_READ", text.lines().count { it.isNotBlank() })
-                val decision = chosen.decision
+                var decision = chosen.decision
+                if (text.isBlank()) {
+                    val image = probeEmptyPage(source, generation, reading.windowId, eventDisplay) ?: return@launch
+                    text = image.receiptText ?: return@launch
+                    decision = AccessibilityRules.evaluate(text)
+                }
                 val proposal = decision.proposal
                 runtime.diagnostic(source, "RULE", decision.reason)
                 if (proposal == null) {
@@ -89,6 +99,38 @@ class LedgerAccessibilityService : AccessibilityService() {
             }
         }
     }
+    private suspend fun probeEmptyPage(source: String, generation: Long, window: Int, display: Int): AccessibilityScreenshotProbe.Result? {
+        fun stillCurrent(): Boolean {
+            if (!runtime.acceptsAccessibility(source) || runtime.settings.value.generation != generation) return false
+            if (!getSystemService(android.os.PowerManager::class.java).isInteractive || getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked) return false
+            return windowsOnAllDisplays.get(display).orEmpty().any {
+                it.id == window && it.type == AccessibilityWindowInfo.TYPE_APPLICATION && it.isFocused && it.root?.packageName?.toString() == source
+            }
+        }
+        // Recents/app transition events can precede focus becoming stable.
+        var retries = 0
+        while (!stillCurrent() && retries++ < 3) delay(350)
+        if (!stillCurrent()) {
+            val interactive = getSystemService(android.os.PowerManager::class.java).isInteractive
+            val locked = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+            val focused = windowsOnAllDisplays.get(display).orEmpty().any { it.id == window && it.isFocused }
+            runtime.diagnostic(source, "IMAGE", "SCREENSHOT_NOT_READY", details = "屏幕交互 $interactive · 锁屏 $locked · 来源窗口聚焦 $focused")
+            return null
+        }
+        if (!screenshotGate.request(source, display, window, true, true, SystemClock.elapsedRealtime())) {
+            delay(2_000)
+            if (!screenshotGate.request(source, display, window, true, stillCurrent(), SystemClock.elapsedRealtime())) return null
+        }
+        runtime.diagnostic(source, "IMAGE", "SCREENSHOT_REQUESTED")
+        val recognize = OcrReceiptRules.supportsPage(source, pageClass.takeIf { pageWindow == window })
+        val result = AccessibilityScreenshotProbe.capture(this, window, display, ::stillCurrent, recognize = recognize) {
+            runtime.diagnostic(source, "IMAGE", it.reason, details = it.details)
+        }
+        runtime.diagnostic(source, if (result.reason.startsWith("SCREENSHOT_")) "IMAGE" else "OCR", result.reason, result.fields, result.details)
+        if (!recognize && source == "com.tencent.mm" && result.reason == "SCREENSHOT_READY") runtime.diagnostic(source, "OCR", "OCR_UNSUPPORTED_PAGE")
+        if (result.receiptText == null) { activePage = null; activeAccount = null }
+        return result
+    }
     private class AndroidPageNode(private val node: AccessibilityNodeInfo) : AccessiblePageNode {
         override val nodeType get() = node.className?.toString()
         override val sensitive get() = android.os.Build.VERSION.SDK_INT >= 34 && node.isAccessibilityDataSensitive
@@ -101,6 +143,6 @@ class LedgerAccessibilityService : AccessibilityService() {
         override val childCount get() = node.childCount
         override fun child(index: Int): AccessiblePageNode? = node.getChild(index)?.let(::AndroidPageNode)
     }
-    override fun onInterrupt() { pending?.cancel(); activePage = null; paymentCache.clear(); runtime.accessibilityConnectionChanged(false) }
+    override fun onInterrupt() { pending?.cancel(); activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); runtime.accessibilityConnectionChanged(false) }
     override fun onDestroy() { scope.cancel(); paymentCache.clear(); runtime.accessibilityConnectionChanged(false); super.onDestroy() }
 }

@@ -5,6 +5,7 @@
     android:notificationTimeout="250"
     android:packageNames="com.eg.android.AlipayGphone,com.tencent.mm,io.qingledger.paymentsimulator"
     android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
     android:canPerformGestures="false"
     android:isAccessibilityTool="false"
     android:description="@string/ledger_accessibility_description" />

@@ -72,8 +72,8 @@ fun LazyListScope.ledgerSearchPage(state: LedgerUiState, viewModel: LedgerViewMo
 }
 
 private fun LazyListScope.ledgerRows(state: LedgerUiState, viewModel: LedgerViewModel, onOpen: (String) -> Unit) {
-    if (state.loading) item("loading") { StatusCard("正在打开账本", "请稍候。") }
-    else if (state.rows.isEmpty()) item("empty") { StatusCard("暂无账单", "可调整关键词、月份或筛选条件。") }
+    if (state.loading) item("loading") { Column(Modifier.padding(top = 16.dp)) { StatusCard("正在打开账本", "请稍候。") } }
+    else if (state.rows.isEmpty()) item("empty") { Column(Modifier.padding(top = 16.dp)) { StatusCard("暂无账单", "可调整关键词、月份或筛选条件。") } }
     val zone = ZoneId.of(state.zoneId)
     val today = LocalDate.now(zone)
     val grouped = state.rows.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() }
