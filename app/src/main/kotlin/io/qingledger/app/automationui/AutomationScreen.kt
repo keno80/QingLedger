@@ -1,140 +1,121 @@
 package io.qingledger.app.automationui
 
-import android.content.Intent
-import android.Manifest
-import android.os.Build
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.qingledger.app.settings.*
 import io.qingledger.designsystem.component.*
-import io.qingledger.domain.model.PendingCandidate
-import io.qingledger.domain.model.CaptureMethod
+import io.qingledger.designsystem.theme.LedgerColors
+import io.qingledger.domain.model.*
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun AutomationScreen(capture: CaptureViewModel) {
-    val context = LocalContext.current
-    val owner = LocalLifecycleOwner.current
+fun AutomationScreen(capture: CaptureViewModel, onPermissions: () -> Unit, onSources: () -> Unit, onLogs: () -> Unit) {
+    ObserveCaptureAccess(capture)
     val settings by capture.settings.collectAsStateWithLifecycle()
     val method by capture.method.collectAsStateWithLifecycle()
     val access by capture.access.collectAsStateWithLifecycle()
     val connected by capture.connected.collectAsStateWithLifecycle()
     val busy by capture.busy.collectAsStateWithLifecycle()
+    val overview by capture.overview.collectAsStateWithLifecycle()
     val message by capture.message.collectAsStateWithLifecycle()
     val runtimeError by capture.runtimeError.collectAsStateWithLifecycle()
-    val lastEvent by capture.lastEvent.collectAsStateWithLifecycle()
-    var noticesEnabled by remember { mutableStateOf(capture.notificationsEnabled()) }
-    var promotionAllowed by remember { mutableStateOf(capture.promotionAllowed()) }
-    val requestNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        noticesEnabled = capture.notificationsEnabled()
-        promotionAllowed = capture.promotionAllowed()
-    }
-    DisposableEffect(owner, capture) {
-        capture.refreshAccess()
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) {
-            capture.refreshAccess()
-            noticesEnabled = capture.notificationsEnabled()
-            promotionAllowed = capture.promotionAllowed()
-        } }
-        owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        val implemented = method == CaptureMethod.ACCESSIBILITY || method == CaptureMethod.NOTIFICATION
-        SettingsGroup("采集方式（三选一）") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                listOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU, CaptureMethod.ROOT).forEach { choice ->
-                    Button(onClick = { capture.selectMethod(choice) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text(choice.label + if (method == choice) " · 已选择" else "")
-                    }
+    var methods by rememberSaveable { mutableStateOf(false) }
+    var scope by rememberSaveable { mutableStateOf(false) }
+    val status = CaptureDisplayRules.status(method, settings.enabled, access, connected, settings.sources.size)
+    val supported = method == CaptureMethod.ACCESSIBILITY || method == CaptureMethod.NOTIFICATION
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(18.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (settings.enabled) "自动记账已开启" else "自动记账已暂停", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Switch(checked = settings.enabled, onCheckedChange = { capture.enable(it) }, enabled = !busy && (settings.enabled || supported && access))
+            }
+            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(LedgerIcons.Privacy, null, Modifier.size(14.dp), tint = LedgerColors.accentContent)
+                Text(method.label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                CaptureBadge(status, status == "运行正常")
+            }
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth().height(.5.dp).background(MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = .12f)))
+            Spacer(Modifier.height(13.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("今日自动记账", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    Text(overview.todayCount?.let { "$it 笔" } ?: "—", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Text("切换方式会暂停采集，确认授权和来源后再开启。")
-            }
-        }
-        val title = when {
-            !implemented -> "${method.label}尚未接入"
-            !access -> "需要${method.label}授权"
-            !settings.enabled -> "采集已暂停"
-            settings.sources.isEmpty() -> "请选择通知来源"
-            !connected -> "监听未连接"
-            else -> "正在采集所选来源"
-        }
-        StatusCard(title, "识别到明确金额和收支方向后直接入账，无需确认；不准确时可在账单中编辑或删除。金额或方向不明确的通知将跳过。")
-        SettingsGroup("识别通知") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (!noticesEnabled) "通知未开启：识别仍正常运行，但无法显示进度和结果。" else "识别中显示进度；支持实时更新时，结果胶囊保留4秒，再转为普通通知，30秒后自动收起。")
-                Text(if (Build.VERSION.SDK_INT < 36) "当前系统使用普通进度通知。" else if (promotionAllowed) "已允许实时更新，具体展示形式由系统决定。" else "实时更新未允许，使用普通通知。")
-                Button(onClick = {
-                    if (Build.VERSION.SDK_INT >= 33 && !noticesEnabled) requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-                }, modifier = Modifier.fillMaxWidth()) { Text(if (noticesEnabled) "通知设置" else "开启识别通知") }
-                if (Build.VERSION.SDK_INT >= 36) Button(onClick = {
-                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                    if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent)
-                    else context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
-                }, modifier = Modifier.fillMaxWidth()) { Text("实时更新设置") }
-            }
-        }
-        SettingsDescription("${method.label}状态", "权限：${if (access) "已授权" else "未授权"} · 监听：${if (connected) "已连接" else "未连接"}")
-        if (method == CaptureMethod.ACCESSIBILITY) {
-            StatusCard("无障碍访问说明", "开启后只读取所选支付应用可见交易成功页面的文字，识别后直接入账。不保存页面原文，不点击、不操作付款。页面覆盖仍待验证，可随时暂停或在系统设置关闭。")
-            Button(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }, modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text("打开无障碍设置") }
-            if (access && !connected) Text("已授权但服务未连接，请在系统设置重新开启轻账无障碍记账。")
-        } else if (method == CaptureMethod.NOTIFICATION) {
-            Button(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }, modifier = Modifier.fillMaxWidth()) { Text("打开通知访问设置") }
-            if (access && !connected) Button(onClick = capture::reconnect, enabled = !busy) { Text("重新连接监听") }
-        } else StatusCard("增强方式开发中", if (method == CaptureMethod.SHIZUKU) "后续接入 Shizuku 服务、ADB 运行身份和采集能力检测；ADB 权限不等于 Root。" else "后续接入独立 Root 授权和采集能力检测。当前没有执行 su 命令。")
-        Button(onClick = { capture.enable(!settings.enabled) }, enabled = !busy && (settings.enabled || (implemented && access)), modifier = Modifier.fillMaxWidth(), minHeight = 48.dp) { Text(if (settings.enabled) "暂停采集" else "开启采集") }
-        SettingsGroup("支付来源（默认关闭）") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                (listOf("com.eg.android.AlipayGphone", "com.tencent.mm") + if (io.qingledger.app.BuildConfig.DEBUG) listOf(if (method == CaptureMethod.NOTIFICATION) "com.android.shell" else "io.qingledger.paymentsimulator") else emptyList()).forEach { source ->
-                    val installed = remember(source) { source == "com.android.shell" || try { @Suppress("DEPRECATION") context.packageManager.getPackageInfo(source, 0); true } catch (_: Exception) { false } }
-                    SettingsDescription(sourceLabel(source), if (!installed) "未安装" else if (source == "com.android.shell" || source == "io.qingledger.paymentsimulator") "独立模拟来源，仅验证采集闭环，不代表真实支付适配" else "按所选方式识别后直接入账；页面与版本覆盖仍待验证")
-                    Button(onClick = { capture.source(source, source !in settings.sources) }, enabled = installed && !busy, minHeight = 48.dp) { Text((if (source in settings.sources) "关闭" else "启用") + sourceLabel(source) + "来源") }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("最近识别", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    val recent = overview.latest
+                    Text(if (recent == null) "暂无记录" else Instant.ofEpochMilli(recent.receivedAt).atZone(ZoneId.of(overview.zoneId)).format(DateTimeFormatter.ofPattern("MM-dd HH:mm")), fontSize = 13.sp)
+                    if (recent != null) Text(overview.latestMerchant?.takeIf { it.isNotBlank() } ?: (sourceLabel(recent.sourcePackage) + " · " + CaptureDisplayRules.stateLabel(recent.state)), fontSize = 11.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 }
             }
         }
-        if (lastEvent == null) Text("本次运行暂无新交易事件，这不表示监听故障。")
-        else Text("本次最近事件：" + Instant.ofEpochMilli(lastEvent!!).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")))
-        (message ?: runtimeError)?.let { StatusCard("状态提示", it); Button(onClick = capture::clearMessage) { Text("关闭采集提示") } }
-        Button(onClick = capture::clearResolved, enabled = !busy) { Text("隐藏已处理事件") }
+        SettingsSection {
+            SettingsNavigationRow("采集方式", method.label, LedgerIcons.Scan, { methods = true })
+            SettingsRowDivider()
+            SettingsNavigationRow("权限与运行", when { !supported -> "${method.label}尚未接入"; !access -> "需要授权"; !connected -> "监听未连接"; else -> "访问权限已配置" }, LedgerIcons.Privacy, onPermissions) { CaptureBadge(if (supported && access && connected) "已配置" else "去配置", supported && access && connected) }
+            SettingsRowDivider()
+            SettingsNavigationRow("采集来源", if (settings.sources.isEmpty()) "尚未开启来源" else settings.sources.joinToString("、") { sourceLabel(it) }, LedgerIcons.Wallet, onSources)
+        }
+        SettingsSection("记录与规则") {
+            SettingsNavigationRow("采集记录", "查看入账、跳过和关联记录", LedgerIcons.Archive, onLogs)
+            SettingsRowDivider()
+            SettingsNavigationRow("识别范围", "只在成功后记账，付款选择不入账", LedgerIcons.Scan, { scope = true })
+        }
+        Text("识别后直接入账，不准确时可编辑或删除账单。", Modifier.padding(horizontal = 3.dp), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        (message ?: runtimeError)?.let { text ->
+            SettingsSection { SettingsNavigationRow("状态提示", text, LedgerIcons.Privacy, capture::clearMessage) { Text("关闭", fontSize = 11.sp) } }
+        }
+    }
+    CaptureMethodSheet(methods, method, busy, capture) { methods = false }
+    CaptureScopeSheet(scope) { scope = false }
+}
+
+@Composable
+internal fun CaptureBadge(label: String, good: Boolean = false) {
+    Text(label, Modifier.background(if (good) LedgerColors.accentSurface else MiuixTheme.colorScheme.secondaryContainer, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 10.sp, color = if (good) LedgerColors.accentContent else MiuixTheme.colorScheme.onSurfaceVariantSummary)
+}
+
+@Composable
+internal fun CaptureMethodSheet(show: Boolean, current: CaptureMethod, busy: Boolean, capture: CaptureViewModel, onClose: () -> Unit) {
+    var unavailable by remember { mutableStateOf<CaptureMethod?>(null) }
+    LaunchedEffect(show) { if (!show) unavailable = null }
+    LedgerBottomSheet(show, "采集方式", onClose) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsSection {
+                listOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU, CaptureMethod.ROOT).forEachIndexed { index, method ->
+                    if (index > 0) SettingsRowDivider()
+                    SettingsNavigationRow(method.label, when (method) { CaptureMethod.ACCESSIBILITY -> "读取所选来源的可见交易页面"; CaptureMethod.SHIZUKU -> "尚未接入 · 后续独立配置"; else -> "尚未接入 · 后续独立授权" }, if (method == CaptureMethod.ROOT) LedgerIcons.Privacy else LedgerIcons.Scan, {
+                        if (method == CaptureMethod.ACCESSIBILITY) { if (current != method) capture.selectMethod(method); onClose() } else unavailable = method
+                    }, !busy) { CaptureBadge(if (method == current) "已选择" else if (method == CaptureMethod.ACCESSIBILITY) "可选择" else "开发中", method == current) }
+                }
+            }
+            unavailable?.let { Text(if (it == CaptureMethod.SHIZUKU) "Shizuku + ADB 后端尚未接入。ADB 权限不等于 Root。" else "Root 后端尚未接入，当前不会执行 su 命令。", fontSize = 13.sp) }
+            Text("切换方式会暂停采集，确认授权和来源后再开启。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
     }
 }
 
-fun LazyListScope.captureEvents(rows: List<PendingCandidate>, capture: CaptureViewModel, onOpen: (String) -> Unit) {
-    item("events-heading") { Text("自动记账记录（最多显示 200 条）") }
-    if (rows.isEmpty()) item("events-empty") { StatusCard("暂无事件", "完成所选方式授权、开启采集并选择支付来源后，识别的交易才会进入这里。") }
-    items(rows, key = { "candidate-${it.id}" }) { row ->
-        Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(sourceLabel(row.sourcePackage) + " · " + when (row.state) { "PENDING" -> "旧版未处理事件"; "AUTO_POSTED" -> "自动入账"; "CONFIRMED" -> "人工入账"; "MERGED" -> "已关联原账单"; "SKIPPED" -> "未识别完整，已跳过"; else -> "已忽略" })
-                Text(row.amountMinor?.let(::formatMoney) ?: "金额待补充")
-                Text(when (row.state) {
-                    "AUTO_POSTED" -> "已直接生成账单，可在账单页修改。"
-                    "MERGED" -> "同一通知会话更新，保留原账单及用户修改。"
-                    "SKIPPED" -> reviewLabel(row.reason).substringBefore("，") + "。未生成账单，如需记录可手动记账。"
-                    else -> reviewLabel(row.reason)
-                })
-                Text(Instant.ofEpochMilli(row.receivedAt).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss")))
-                if (row.state == "PENDING") FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("旧版事件不会追溯入账，可手动补记。")
-                    Button(onClick = { capture.ignore(row.id) }) { Text("忽略事件") }
-                }
-            }
+@Composable
+internal fun CaptureScopeSheet(show: Boolean, onClose: () -> Unit) {
+    LedgerBottomSheet(show, "识别范围", onClose) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("只读取已开启来源的可见交易文字；交易成功后直接记账，失败、取消和付款方式选择不入账。", fontSize = 14.sp)
+            Text("付款账户可在支付前暂存并关联同次成功结果；未识别到时保留未指定账户。不保存页面原文，不执行点击或付款。", fontSize = 13.sp)
+            Text("页面或版本变化可能造成漏记，真实微信、支付宝覆盖仍需验证。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
     }
 }

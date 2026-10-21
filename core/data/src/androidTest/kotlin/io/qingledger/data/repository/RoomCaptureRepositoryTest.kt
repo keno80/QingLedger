@@ -54,6 +54,24 @@ class RoomCaptureRepositoryTest {
         capture = RoomCaptureRepository(database, ledger)
     }
     @After fun teardown() { database.close() }
+    @Test fun overviewCountIncludesHiddenRecordsAndIgnoresListLimitAndManualConfirmation() = runBlocking {
+        enable()
+        repeat(205) { i ->
+            val e = event("overview-$i").copy(receivedAt = now + i * 180000L)
+            capture.capture(e, proposal)
+        }
+        val before = capture.overview(PeriodRange(now, now + 206 * 180000L)).first()
+        assertEquals(205, before.todayCount)
+        assertEquals(now + 204 * 180000L, before.latest!!.receivedAt)
+        assertEquals(200, capture.candidates.first().size)
+        database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity("legacy-overview", source, "user-0", "manual-overview", "legacy-digest", 100, now + 205 * 180000L, 1500, "EXPENSE", "UNVERIFIED_TEMPLATE"))
+        val manual = capture.candidates.first().first { it.state == "PENDING" }
+        capture.confirm(manual.id, TransactionDraft(TransactionKind.EXPENSE, 1500, now + 205 * 180000L))
+        capture.clearResolved()
+        assertTrue(capture.candidates.first().isEmpty())
+        assertEquals(205, capture.overview(PeriodRange(now, now + 206 * 180000L)).first().todayCount)
+        assertEquals(0, capture.overview(PeriodRange(now - 1, now)).first().todayCount)
+    }
     private suspend fun enable() { capture.setSource(source, true); capture.setEnabled(true) }
     private suspend fun event(session: String = "session", digest: String = "digest") = CapturedNotification(source, "user-0", session, digest, now, 100, capture.settings.first().generation)
     @Test fun collectionStartsDisabledAndUnknownSourcesCannotBeEnabled() = runBlocking {

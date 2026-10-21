@@ -7,6 +7,7 @@ interface CaptureRepository {
     val settings: Flow<CaptureSettings>
     val candidates: Flow<List<PendingCandidate>>
     val pendingCount: Flow<Int>
+    fun overview(period: PeriodRange): Flow<CaptureOverview>
     suspend fun setEnabled(enabled: Boolean)
     suspend fun setSource(source: String, enabled: Boolean)
     suspend fun capture(event: CapturedNotification, proposal: NotificationProposal): Boolean

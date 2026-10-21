@@ -16,8 +16,12 @@ class RoomCaptureRepository(
     override val settings = combine(dao.observeConfiguration(), dao.observeSources()) { config, sources ->
         CaptureSettings(config?.enabled ?: false, config?.generation ?: 0, sources.filter { it.enabled && it.sourcePackage in allowedSources }.map { it.sourcePackage }.toSet())
     }
-    override val candidates = dao.candidates().map { rows -> rows.map { PendingCandidate(it.id, it.sourcePackage, it.versionCode, it.receivedAt, it.amountMinor, it.kind?.let(TransactionKind::valueOf), it.reason, it.state, it.transactionId, it.relatedTransactionId) } }
+    override val candidates = dao.candidates().map { rows -> rows.map { record -> record.candidate.let { PendingCandidate(it.id, it.sourcePackage, it.versionCode, it.receivedAt, it.amountMinor, it.kind?.let(TransactionKind::valueOf), it.reason, it.state, it.transactionId, it.relatedTransactionId, record.merchantName, record.accountName) } } }
     override val pendingCount = dao.pendingCount()
+    override fun overview(period: PeriodRange) = combine(dao.postedCount(period.start, period.end), dao.latest()) { count, latest ->
+        val row = latest?.candidate
+        CaptureOverview(count, row?.let { PendingCandidate(it.id, it.sourcePackage, it.versionCode, it.receivedAt, it.amountMinor, it.kind?.let(TransactionKind::valueOf), it.reason, it.state, it.transactionId, it.relatedTransactionId) }, latest?.merchantName)
+    }
     override suspend fun capturedState(event: CapturedNotification): String? = dao.replay(event.sessionKey, event.digest)?.state
     override suspend fun setEnabled(enabled: Boolean) = database.withTransaction {
         dao.seed(CaptureConfiguration())

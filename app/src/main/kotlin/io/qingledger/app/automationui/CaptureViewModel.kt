@@ -3,12 +3,26 @@ package io.qingledger.app.automationui
 import androidx.lifecycle.*
 import io.qingledger.domain.model.*
 import io.qingledger.domain.repository.CaptureRepository
+import io.qingledger.domain.repository.LedgerRepository
+import java.time.LocalDate
+import java.time.ZoneId
 import io.qingledger.automation.notification.NotificationCaptureRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class CaptureViewModel(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime) : ViewModel() {
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class CaptureViewModel(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository) : ViewModel() {
+    private val refresh = MutableStateFlow(0)
+    val overview = refresh.flatMapLatest {
+        flow {
+            ledger.initialize()
+            val zone = ZoneId.of(ledger.bookZoneId())
+            val today = LocalDate.now(zone)
+            val period = PeriodRange(today.atStartOfDay(zone).toInstant().toEpochMilli(), today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+            emitAll(repository.overview(period).map { it.copy(zoneId = zone.id) })
+        }.catch { error -> if (error is CancellationException) throw error; emit(CaptureOverview()) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, CaptureOverview())
     val settings = repository.settings.stateIn(viewModelScope, SharingStarted.Eagerly, CaptureSettings())
     val candidates = repository.candidates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val pendingCount = repository.pendingCount.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
@@ -26,7 +40,7 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
     val busy = busyState.asStateFlow()
     private val messageState = MutableStateFlow<String?>(null)
     val message = messageState.asStateFlow()
-    fun refreshAccess() { accessState.value = when (method.value) {
+    fun refreshAccess() { refresh.update { it + 1 }; accessState.value = when (method.value) {
         CaptureMethod.ACCESSIBILITY -> runtime.hasAccessibilityAccess()
         CaptureMethod.NOTIFICATION -> runtime.hasAccess()
         else -> false
@@ -64,10 +78,10 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
             } finally { busyState.value = false }
         }
     }
-    class Factory(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime) : ViewModelProvider.Factory {
+    class Factory(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(CaptureViewModel::class.java))
-            @Suppress("UNCHECKED_CAST") return CaptureViewModel(repository, runtime) as T
+            @Suppress("UNCHECKED_CAST") return CaptureViewModel(repository, runtime, ledger) as T
         }
     }
 }

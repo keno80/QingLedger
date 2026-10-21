@@ -60,6 +60,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     val busy by ledger.busy.collectAsStateWithLifecycle()
     val captureBusy by capture.busy.collectAsStateWithLifecycle()
     val candidateRows by capture.candidates.collectAsStateWithLifecycle()
+    val captureOverview by capture.overview.collectAsStateWithLifecycle()
     val undo by ledger.undo.collectAsStateWithLifecycle()
     var screen by rememberSaveable { mutableStateOf("list") }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -68,6 +69,9 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var accountToEdit by rememberSaveable { mutableStateOf<String?>(null) }
     var transactionParent by rememberSaveable { mutableStateOf("list") }
     var editorCategoryManagement by rememberSaveable { mutableStateOf(false) }
+    var captureSourcesParent by rememberSaveable { mutableStateOf("automation") }
+    var captureLogFilter by rememberSaveable { mutableStateOf(0) }
+    var captureLogId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
         value = true to null
         value = if (selectedId == null) false to null else try { false to ledger.get(selectedId!!) } catch (_: Exception) { false to null }
@@ -76,7 +80,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
         if (screen == "data") data.cancelPreview()
         if (screen == "csvimport") csvImport.reset()
         if (screen != "list") stateHolder.removeState(if (screen == "search") "ledger-search" else "$screen-$selectedId-$session")
-        screen = when (screen) { "csvimport" -> "data"; "candidate" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
+        screen = when (screen) { "csvimport" -> "data"; "candidate" -> "capture-logs"; "capture-sources" -> captureSourcesParent; "capture-permissions", "capture-logs" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
         selectedId = null
     }
     fun openEditor(id: String?) { if (id == null) transactionParent = "list"; selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
@@ -106,7 +110,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     ) { insets ->
         val showBottomBar = screen == "list" && route != AppRoute.AUTOMATION
         Box(Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding()) {
-        stateHolder.SaveableStateProvider(when (screen) { "list" -> route.name; "search" -> "ledger-search"; else -> "$screen-$selectedId-$session" }) {
+        stateHolder.SaveableStateProvider(when (screen) { "list" -> route.name; "search" -> "ledger-search"; "capture-logs" -> "capture-logs"; else -> "$screen-$selectedId-$session" }) {
             val pageState = rememberLazyListState()
             val pageScope = rememberCoroutineScope()
             LazyColumn(
@@ -114,13 +118,13 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 modifier = Modifier.fillMaxSize(),
                 // Scroll content behind the floating controls; only the final item needs clearance.
                 contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (showBottomBar) 132.dp else 16.dp),
-                verticalArrangement = Arrangement.spacedBy(if (screen == "search" || (screen == "list" && route == AppRoute.LEDGER)) 0.dp else 16.dp),
+                verticalArrangement = Arrangement.spacedBy(if (screen in setOf("search", "capture-logs") || (screen == "list" && route == AppRoute.LEDGER)) 0.dp else 16.dp),
             ) {
                 if (screen != "list" || (route != AppRoute.LEDGER && route != AppRoute.SETTINGS && route != AppRoute.STATISTICS)) item(key = "header") {
-                    Column(Modifier.padding(bottom = if (screen == "search") 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (screen in setOf("edit", "categories", "preferences", "appearance", "assets", "accounts", "data", "csvimport")) Box(Modifier.fillMaxWidth().height(44.dp)) {
+                    Column(Modifier.padding(bottom = if (screen in setOf("search", "capture-logs")) 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (screen in setOf("edit", "categories", "preferences", "appearance", "assets", "accounts", "data", "csvimport", "automation", "capture-permissions", "capture-sources", "capture-logs")) Box(Modifier.fillMaxWidth().height(44.dp)) {
                             IconButton(onClick = { if (!busy && !captureBusy && !dataState.busy && !importState.busy) closePage() }, modifier = Modifier.align(Alignment.CenterStart).size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(18.dp)) }
-                            Text(when (screen) { "csvimport" -> "导入账单"; "data" -> "数据管理"; "categories" -> "分类管理"; "accounts" -> "账户管理"; "assets" -> "资产与账户"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                            Text(when (screen) { "automation" -> "自动记账"; "capture-permissions" -> "权限与运行"; "capture-sources" -> "采集来源"; "capture-logs" -> "采集记录"; "csvimport" -> "导入账单"; "data" -> "数据管理"; "categories" -> "分类管理"; "accounts" -> "账户管理"; "assets" -> "资产与账户"; "preferences" -> "设置"; "appearance" -> "显示与主题"; else -> if (selectedId == null) "记一笔" else "编辑账单" }, Modifier.align(Alignment.Center), fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                         } else Row(verticalAlignment = Alignment.CenterVertically) {
                             if (screen != "list") IconButton(onClick = { if (!busy && !captureBusy) closePage() }, modifier = Modifier.size(44.dp)) { Icon(LedgerIcons.Back, "返回", modifier = Modifier.size(22.dp)) }
                             Text(when (screen) { "search" -> "搜索账单"; "preferences" -> "设置"; "automation" -> "自动记账"; "edit" -> if (selectedId == null) "记一笔" else "编辑账单"; "detail" -> "账单详情"; "candidate" -> "核对交易事件"; "categories" -> "分类管理"; "accounts" -> "账户管理"; else -> route.title }, fontSize = if (screen == "list") 24.sp else 20.sp, fontWeight = FontWeight.SemiBold)
@@ -151,9 +155,14 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
                     screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy || importState.busy) { source -> csvImport.reset(source); session++; screen = "csvimport" } }
                     screen == "csvimport" -> csvImportPage(importState, csvImport)
+                    screen == "capture-permissions" -> item { CapturePermissionsScreen(capture) { captureSourcesParent = "capture-permissions"; session++; screen = "capture-sources" } }
+                    screen == "capture-sources" -> item { CaptureSourcesScreen(capture) }
+                    screen == "capture-logs" -> captureRecords(candidateRows, captureOverview.zoneId, captureLogFilter, { captureLogFilter = it }) { captureLogId = it.id }
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
-                        item("capture-controls") { AutomationScreen(capture) }
-                        captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }
+                        item("capture-controls") { AutomationScreen(capture,
+                            { session++; screen = "capture-permissions" },
+                            { captureSourcesParent = "automation"; session++; screen = "capture-sources" },
+                            { captureLogFilter = 0; session++; screen = "capture-logs" }) }
                     }
                     route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
                     route == AppRoute.STATISTICS -> item { StatisticsScreen(statisticsState, statistics, state) { openTransaction(it, "list") } }
@@ -175,6 +184,8 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                 item { ReferenceManagementScreen(state, ledger, true, busy, { editorCategoryManagement = false }, { managementScope.launch { managementState.animateScrollToItem(0) } }) }
             }
         }
+        CaptureRecordSheet(candidateRows.find { it.id == captureLogId }, captureOverview.zoneId, { captureLogId = null },
+            { openTransaction(it, "capture-logs") }, { selectedId = it; session++; screen = "candidate"; capture.clearMessage() })
         }
     }
 }

@@ -46,6 +46,8 @@ internal fun DeveloperToolsSheet(show: Boolean, capture: CaptureViewModel, onDis
                     Text("已选择 ${settings.sources.size} 个来源", fontSize = 13.sp)
                     Text(runtimeError ?: "当前无运行错误", fontSize = 13.sp)
                     Text("轻账 ${BuildConfig.VERSION_NAME} · ${if (BuildConfig.DEBUG) "Debug" else "Release"}", fontSize = 12.sp)
+                    Text("隐藏记录只影响展示，仍保留重复抑制标记与账单。", fontSize = 12.sp)
+                    Button(onClick = { capture.clearResolved(); panel = null }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("隐藏已处理记录") }
                 }
             }
             Button(onClick = { panel = null }, enabled = !busy, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(if (panel == "switch") "取消" else "关闭") }

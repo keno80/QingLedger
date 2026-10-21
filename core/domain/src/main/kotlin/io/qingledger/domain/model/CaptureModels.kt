@@ -10,6 +10,7 @@ data class PendingCandidate(
     val id: String, val sourcePackage: String, val versionCode: Long?, val receivedAt: Long,
     val amountMinor: Long?, val kind: TransactionKind?, val reason: String,
     val state: String, val transactionId: String?, val relatedTransactionId: String?,
+    val merchant: String? = null, val accountName: String? = null,
 )
 
 object NotificationRules {
