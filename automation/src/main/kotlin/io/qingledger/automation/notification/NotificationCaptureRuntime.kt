@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.os.Process
+import android.os.SystemClock
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.view.accessibility.AccessibilityManager
 import android.service.notification.StatusBarNotification
@@ -33,6 +34,7 @@ class NotificationCaptureRuntime(
     private data class Queued(val event: CapturedNotification, val text: String, val method: CaptureMethod, val accountName: String? = null)
     private val queue = Channel<Queued>(128)
     private val sessions = ConcurrentHashMap<String, String>()
+    private val paymentCache = PaymentSessionCache()
     val settings = repository.settings.stateIn(scope, SharingStarted.Eagerly, CaptureSettings())
     private val mutableConnected = MutableStateFlow(false)
     val connected = mutableConnected.asStateFlow()
@@ -64,7 +66,11 @@ class NotificationCaptureRuntime(
                 var announced = false
                 try {
                     if (!isCurrent(event, origin)) continue
-                    val parsed = (if (origin == CaptureMethod.ACCESSIBILITY) AccessibilityRules.propose(text) else NotificationRules.propose(text)) ?: continue
+                    val parsed = (when {
+                        event.sourcePackage == ALIPAY && (origin == CaptureMethod.NOTIFICATION || event.sessionKey.startsWith("notice:")) -> AlipayNoticeRules.propose(text)
+                        origin == CaptureMethod.ACCESSIBILITY -> AccessibilityRules.propose(text)
+                        else -> NotificationRules.propose(text)
+                    }) ?: continue
                     if (repository.capturedState(event) != null) continue
                     if (noticeGate.accept("${event.generation}|${event.sessionKey}|${event.digest}")) {
                         liveNotification.started()
@@ -107,6 +113,7 @@ class NotificationCaptureRuntime(
         check(preferences.edit().putString("method", selected.name).commit()) { "采集方式保存失败。" }
         mutableMethod.value = selected
         sessions.clear()
+        synchronized(paymentCache) { paymentCache.clear() }
         }
     }
     fun accessibilityConnectionChanged(connected: Boolean) {
@@ -118,9 +125,40 @@ class NotificationCaptureRuntime(
         settings.value.enabled && source in accessibilitySources && source in settings.value.sources
     fun accessibilityPosted(source: String, session: String, text: String, generation: Long, accountName: String? = null) {
         if (!acceptsAccessibility(source)) return
+        // Alipay's page and notification do not share an order ID. Only its settled
+        // notification writes a bill; never merge separate payments by amount/time.
+        if (source == ALIPAY) return
         val event = CapturedNotification(source, Process.myUserHandle().toString(), "a11y:" + hash(session), hash(text + "|account:" + accountName.orEmpty()), System.currentTimeMillis(), null, generation)
         if (queue.trySend(Queued(event, text.take(8192), CaptureMethod.ACCESSIBILITY, accountName)).isFailure) mutableError.value = "事件队列已满，可能存在未采集记录。"
     }
+    fun observePaymentPage(source: String, generation: Long, text: String, selected: List<String>) {
+        if (source == ALIPAY && acceptsAccessibility(source)) synchronized(paymentCache) {
+            paymentCache.observe(source, generation, text, selected, SystemClock.elapsedRealtime())
+        }
+    }
+    fun accessibilityNotificationPosted(source: String, notification: Notification, eventTime: Long) {
+        if (source != ALIPAY || !acceptsAccessibility(source) || connected.value && hasAccess()) return
+        settledNotice(source, notification, "event:$eventTime", CaptureMethod.ACCESSIBILITY)
+    }
+    private fun settledNotice(source: String, notification: Notification, fallbackInstance: String, origin: CaptureMethod) {
+        if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        val current = settings.value
+        if (!current.enabled || source !in current.sources) return
+        val extras = notification.extras
+        val fields = listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT)
+            .mapNotNull { extras.getCharSequence(it)?.toString()?.take(4096) }.distinct()
+        val text = fields.joinToString("\n").take(8192)
+        val proposal = AlipayNoticeRules.propose(text) ?: return
+        val instance = if (notification.`when` > 0) notification.`when`.toString() else fallbackInstance
+        val profile = Process.myUserHandle().toString()
+        val session = "notice:" + hash("$source|$profile|$instance|${notification.contentIntent?.hashCode()}|${proposal.kind}|${proposal.amountMinor}")
+        val account = synchronized(paymentCache) {
+            paymentCache.consume(source, current.generation, proposal, SystemClock.elapsedRealtime())
+        }
+        val event = CapturedNotification(source, profile, session, hash(text), System.currentTimeMillis(), null, current.generation)
+        if (queue.trySend(Queued(event, text, origin, account)).isFailure) mutableError.value = "事件队列已满，可能存在未采集记录。"
+    }
+    internal fun close() { scope.cancel(); liveNotification.cancel() }
     private fun pauseAfterDisconnect(label: String) {
         if (!settings.value.enabled) return
         mutableError.value = "${label}监听已中断，采集已暂停；中断期间可能漏记。"
@@ -137,10 +175,14 @@ class NotificationCaptureRuntime(
         if (hasAccess()) android.service.notification.NotificationListenerService.requestRebind(ComponentName(app, LedgerNotificationListener::class.java))
     }
     fun clearError() { mutableError.value = null }
-    fun afterRestore() { sessions.clear(); mutableLastEvent.value = null; mutableError.value = null }
+    fun afterRestore() { sessions.clear(); synchronized(paymentCache) { paymentCache.clear() }; mutableLastEvent.value = null; mutableError.value = null }
     fun removed(sbn: StatusBarNotification) { sessions.remove(sbn.key) }
     fun posted(sbn: StatusBarNotification) {
         val current = settings.value
+        if (method.value == CaptureMethod.ACCESSIBILITY && sbn.packageName == ALIPAY && acceptsAccessibility(sbn.packageName) && sbn.user == Process.myUserHandle()) {
+            settledNotice(sbn.packageName, sbn.notification, "listener:${sbn.key}|${sbn.postTime}", CaptureMethod.ACCESSIBILITY)
+            return
+        }
         if (method.value != CaptureMethod.NOTIFICATION || !current.enabled || sbn.packageName !in current.sources || sbn.user != Process.myUserHandle()) return
         if (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         val extras = sbn.notification.extras
@@ -153,4 +195,5 @@ class NotificationCaptureRuntime(
         if (queue.trySend(Queued(event, text, CaptureMethod.NOTIFICATION)).isFailure) mutableError.value = "事件队列已满，可能存在未采集记录。"
     }
     private fun hash(value: String): String = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    private companion object { const val ALIPAY = "com.eg.android.AlipayGphone" }
 }

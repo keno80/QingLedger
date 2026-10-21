@@ -97,7 +97,7 @@ internal fun CaptureMethodSheet(show: Boolean, current: CaptureMethod, busy: Boo
             SettingsSection {
                 listOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU, CaptureMethod.ROOT).forEachIndexed { index, method ->
                     if (index > 0) SettingsRowDivider()
-                    SettingsNavigationRow(method.label, when (method) { CaptureMethod.ACCESSIBILITY -> "读取所选来源的可见交易页面"; CaptureMethod.SHIZUKU -> "尚未接入 · 后续独立配置"; else -> "尚未接入 · 后续独立授权" }, if (method == CaptureMethod.ROOT) LedgerIcons.Privacy else LedgerIcons.Scan, {
+                    SettingsNavigationRow(method.label, when (method) { CaptureMethod.ACCESSIBILITY -> "读取所选来源的页面与交易通知"; CaptureMethod.SHIZUKU -> "尚未接入 · 后续独立配置"; else -> "尚未接入 · 后续独立授权" }, if (method == CaptureMethod.ROOT) LedgerIcons.Privacy else LedgerIcons.Scan, {
                         if (method == CaptureMethod.ACCESSIBILITY) {
                             val afterSelection = {
                                 onClose()

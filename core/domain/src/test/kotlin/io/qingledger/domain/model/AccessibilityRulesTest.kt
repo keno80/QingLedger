@@ -49,7 +49,7 @@ class AccessibilityRulesTest {
     }
     @Test fun uncertainAmountsAndRefundsAreNotPosted() {
         assertNull(AccessibilityRules.propose("支付成功\n实付23.50元\n余额99.00元"))
-        assertNull(AccessibilityRules.propose("退款成功\n23.50元"))
+        assertEquals(TransactionKind.REFUND, AccessibilityRules.propose("退款成功\n23.50元")!!.kind)
         assertNull(AccessibilityRules.propose("支付成功\nUSD23.50"))
         assertNull(AccessibilityRules.propose("支付成功\n支付失败\n23.50元"))
     }

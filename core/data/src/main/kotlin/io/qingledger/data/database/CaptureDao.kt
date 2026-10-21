@@ -23,6 +23,7 @@ interface CaptureDao {
     @Query("SELECT * FROM notification_candidates WHERE sessionKey = :session AND digest = :digest") suspend fun replay(session: String, digest: String): NotificationCandidateEntity?
     @Query("SELECT * FROM notification_candidates WHERE sessionKey = :session ORDER BY receivedAt DESC LIMIT 1") suspend fun previous(session: String): NotificationCandidateEntity?
     @Query("SELECT transactionId FROM notification_candidates WHERE sessionKey = :session AND transactionId IS NOT NULL ORDER BY receivedAt DESC LIMIT 1") suspend fun sessionTransaction(session: String): String?
+    @Query("SELECT transactionId FROM notification_candidates WHERE sessionKey = :session AND kind = :kind AND transactionId IS NOT NULL ORDER BY receivedAt DESC LIMIT 1") suspend fun sessionTransactionByKind(session: String, kind: String?): String?
     @Query("SELECT id FROM transactions WHERE deletedAt IS NULL AND bookId = 'default' AND currency = 'CNY' AND amountMinor = :amount AND kind = :kind AND occurredAt >= :start AND occurredAt <= :end ORDER BY occurredAt DESC LIMIT 1") suspend fun similar(amount: Long, kind: String, start: Long, end: Long): String?
     @Insert suspend fun insert(candidate: NotificationCandidateEntity)
     @Query("UPDATE notification_candidates SET state = :state, transactionId = :transaction WHERE id = :id") suspend fun resolve(id: String, state: String, transaction: String?)

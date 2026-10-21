@@ -82,7 +82,7 @@ fun CaptureSourcesScreen(capture: CaptureViewModel) {
                 if (index > 0) SettingsRowDivider()
                 val installed = remember(source, resumed) { source == "com.android.shell" || try { @Suppress("DEPRECATION") context.packageManager.getPackageInfo(source, 0); true } catch (_: Exception) { false } }
                 val enabled = source in settings.sources
-                SettingsNavigationRow(sourceLabel(source), when { !installed -> "未安装"; source in setOf("io.qingledger.paymentsimulator", "com.android.shell") -> "独立模拟来源，仅用于测试"; enabled -> "已开启 · 页面与版本覆盖待验证"; else -> "尚未开启" }, LedgerIcons.Wallet, { if (installed && !busy) capture.source(source, !enabled) }, installed && !busy) {
+                SettingsNavigationRow(sourceLabel(source), when { !installed -> "未安装"; source in setOf("io.qingledger.paymentsimulator", "com.android.shell") -> "独立模拟来源，仅用于测试"; enabled && source == "com.eg.android.AlipayGphone" -> "通知入账 · 付款页关联账户"; enabled -> "已开启 · 页面与版本覆盖待验证"; else -> "尚未开启" }, LedgerIcons.Wallet, { if (installed && !busy) capture.source(source, !enabled) }, installed && !busy) {
                     Switch(checked = enabled, onCheckedChange = { capture.source(source, it) }, enabled = installed && !busy)
                 }
             }

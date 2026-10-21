@@ -24,8 +24,8 @@ class NotificationRulesTest {
         assertEquals(1234L, NotificationRules.propose("支付成功 ¥12.34，付款金额 12.34 元")!!.amountMinor)
     }
     @Test fun refundsAndTransfersNeverBecomeIncomeByDefault() {
-        assertNull(NotificationRules.propose("退款到账 10 元")!!.kind)
-        assertEquals("REFUND_REVIEW", NotificationRules.propose("退款到账 10 元")!!.reason)
+        assertEquals(TransactionKind.REFUND, NotificationRules.propose("退款到账 10 元")!!.kind)
+        assertEquals("UNVERIFIED_TEMPLATE", NotificationRules.propose("退款到账 10 元")!!.reason)
         assertNull(NotificationRules.propose("收到转账 10 元")!!.kind)
     }
     @Test fun missingAmountAndMixedDirectionRemainUncertain() {

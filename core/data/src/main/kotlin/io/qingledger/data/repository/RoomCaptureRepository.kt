@@ -47,8 +47,8 @@ class RoomCaptureRepository(
             if (proposal.reason in setOf("REFUND_REVIEW", "UNSUPPORTED_CURRENCY")) proposal.reason else if (related != null) "POSSIBLE_DUPLICATE" else if (previous != null) "NOTIFICATION_UPDATE" else proposal.reason,
             relatedTransactionId = related))
         val canPost = amount != null && amount in 1..LedgerRules.MAX_AMOUNT &&
-            kind in setOf(TransactionKind.EXPENSE, TransactionKind.INCOME) && proposal.reason == "UNVERIFIED_TEMPLATE"
-        val sessionTransaction = dao.sessionTransaction(event.sessionKey)
+            kind in setOf(TransactionKind.EXPENSE, TransactionKind.INCOME, TransactionKind.REFUND) && proposal.reason == "UNVERIFIED_TEMPLATE"
+        val sessionTransaction = dao.sessionTransactionByKind(event.sessionKey, kind?.name)
         when {
             !canPost -> dao.resolve(candidateId, "SKIPPED", null)
             sessionTransaction != null -> dao.resolve(candidateId, "MERGED", sessionTransaction)

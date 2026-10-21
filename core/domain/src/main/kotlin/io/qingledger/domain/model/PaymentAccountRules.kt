@@ -15,6 +15,8 @@ object PaymentAccountRules {
     fun canonicalName(raw: String): String? {
         val value = raw.replace(Regex("\\s+"), "")
         return when (value) {
+            "余额", "支付宝余额" -> "支付宝余额"
+            "余额宝" -> "余额宝"
             "零钱", "微信零钱" -> "微信零钱"
             "零钱通", "微信零钱通" -> "微信零钱通"
             else -> {

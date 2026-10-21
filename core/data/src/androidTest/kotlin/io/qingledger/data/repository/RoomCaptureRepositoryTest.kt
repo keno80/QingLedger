@@ -11,6 +11,35 @@ import org.junit.*
 import org.junit.Assert.*
 
 class RoomCaptureRepositoryTest {
+    @Test fun reusedNotificationSessionDoesNotMergeRefundIntoExpense() = runBlocking {
+        enable()
+        capture.capture(event("notice:shared", "expense"), proposal)
+        capture.capture(event("notice:shared", "refund"), proposal.copy(kind = TransactionKind.REFUND))
+        assertEquals(2, capture.candidates.first().count { it.state == "AUTO_POSTED" })
+        assertEquals(0L, ledger.summary(period).first().expense)
+    }
+    @Test fun successfulRefundAutoPostsAndReducesNetExpenseWithoutGuessingOriginal() = runBlocking {
+        enable()
+        capture.capture(event("notice:expense"), proposal)
+        capture.capture(event("notice:refund"), proposal.copy(kind = TransactionKind.REFUND))
+        val rows = capture.candidates.first()
+        assertEquals(2, rows.count { it.state == "AUTO_POSTED" })
+        val refund = ledger.get(rows.single { it.kind == TransactionKind.REFUND }.transactionId!!)!!
+        assertNull(refund.originalExpenseId)
+        assertNull(refund.accountId)
+        assertEquals(0L, ledger.summary(period).first().income)
+        assertEquals(0L, ledger.summary(period).first().expense)
+    }
+    @Test fun refundUpdateMergesButSeparateSameAmountRefundsRemainSeparate() = runBlocking {
+        enable()
+        val refund = proposal.copy(kind = TransactionKind.REFUND)
+        capture.capture(event("notice:r1"), refund)
+        capture.capture(event("notice:r1", "expanded"), refund)
+        capture.capture(event("notice:r2"), refund)
+        assertEquals(2, capture.candidates.first().count { it.state == "AUTO_POSTED" })
+        assertEquals(1, capture.candidates.first().count { it.state == "MERGED" })
+        assertEquals(-2468L, ledger.summary(period).first().expense)
+    }
     @Test fun recognizedWalletUsesExistingAccount() = runBlocking {
         enable(); capture.capture(event(), proposal.copy(accountName = "微信零钱"))
         val id = capture.candidates.first().single().transactionId!!

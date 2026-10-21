@@ -1,6 +1,7 @@
 package io.qingledger.automation.accessibility
 
 import android.accessibilityservice.AccessibilityService
+import android.app.Notification
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import io.qingledger.automation.notification.CaptureHost
@@ -23,6 +24,10 @@ class LedgerAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val source = event?.packageName?.toString() ?: return
         if (!runtime.acceptsAccessibility(source)) { activePage = null; paymentCache.clear(); pending?.cancel(); return }
+        if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+            (event.parcelableData as? Notification)?.let { runtime.accessibilityNotificationPosted(source, it, event.eventTime) }
+            return
+        }
         if (pending?.isActive == true) return
         pending = scope.launch {
             delay(350)
@@ -35,6 +40,7 @@ class LedgerAccessibilityService : AccessibilityService() {
                 val text = snapshot.text
                 val proposal = AccessibilityRules.propose(text)
                 if (proposal == null) {
+                    runtime.observePaymentPage(source, generation, text, snapshot.selected)
                     paymentCache.observe(source, generation, text, snapshot.selected, SystemClock.elapsedRealtime())
                     activePage = null; activeAccount = null; return@launch
                 }
