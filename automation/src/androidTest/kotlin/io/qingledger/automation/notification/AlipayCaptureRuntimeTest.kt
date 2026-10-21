@@ -18,6 +18,9 @@ class AlipayCaptureRuntimeTest {
         xml.use {
             while (it.eventType != org.xmlpull.v1.XmlPullParser.START_TAG) it.next()
             val types = it.getAttributeIntValue("http://schemas.android.com/apk/res/android", "accessibilityEventTypes", 0)
+            val flags = it.getAttributeIntValue("http://schemas.android.com/apk/res/android", "accessibilityFlags", 0)
+            assertTrue(flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0)
+            assertTrue(flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS != 0)
             assertTrue(types and android.view.accessibility.AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED != 0)
             assertTrue(types and android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED != 0)
         }

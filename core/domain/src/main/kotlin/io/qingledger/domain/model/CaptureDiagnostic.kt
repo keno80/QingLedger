@@ -1,7 +1,7 @@
 package io.qingledger.domain.model
 
 /** Metadata only. No page text, financial amount, merchant or account is retained. */
-data class CaptureDiagnostic(val sourcePackage: String, val at: Long, val stage: String, val reason: String, val fields: Int? = null)
+data class CaptureDiagnostic(val sourcePackage: String, val at: Long, val stage: String, val reason: String, val fields: Int? = null, val details: String? = null)
 
 object CaptureDiagnosticLabels {
     fun stage(value: String): String = when (value) {
@@ -14,6 +14,8 @@ object CaptureDiagnosticLabels {
         "CAPTURE_DISABLED" -> "自动记账已暂停"
         "SOURCE_DISABLED" -> "该来源未开启"
         "PAGE_READ" -> "已读取可见页面文字"
+        "WINDOW_READ" -> "窗口节点读取统计"
+        "WINDOW_CONFLICT" -> "多个窗口的交易结果冲突，未入账"
         "PAGE_EMPTY" -> "页面未提供可读取文字"
         "ROOT_UNAVAILABLE" -> "无法获取当前页面节点"
         "SOURCE_MISMATCH" -> "当前窗口不属于事件来源"

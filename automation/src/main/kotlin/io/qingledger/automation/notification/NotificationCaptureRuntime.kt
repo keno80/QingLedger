@@ -37,14 +37,15 @@ class NotificationCaptureRuntime(
     private val paymentCache = PaymentSessionCache()
     private val mutableDiagnostics = MutableStateFlow<List<CaptureDiagnostic>>(emptyList())
     val diagnostics = mutableDiagnostics.asStateFlow()
-    internal fun diagnostic(source: String, stage: String, reason: String, fields: Int? = null) {
+    @Synchronized internal fun diagnostic(source: String, stage: String, reason: String, fields: Int? = null, details: String? = null) {
         if (source !in accessibilitySources) return
         val now = System.currentTimeMillis()
-        val item = CaptureDiagnostic(source, now, stage, reason, fields)
-        mutableDiagnostics.update { previous ->
-            if (previous.any { it.sourcePackage == source && it.stage == stage && it.reason == reason && it.fields == fields && now - it.at in 0..2000 }) previous
-            else (previous + item).takeLast(40)
-        }
+        val item = CaptureDiagnostic(source, now, stage, reason, fields, details)
+        val previous = mutableDiagnostics.value
+        if (previous.any { it.sourcePackage == source && it.stage == stage && it.reason == reason && it.fields == fields && it.details == details && now - it.at in 0..2000 }) return
+        mutableDiagnostics.value = (previous + item).takeLast(40)
+        if (app.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
+            android.util.Log.i("QingLedgerCapture", "$source $stage $reason fields=$fields ${details.orEmpty()}")
     }
     fun accessibilityEventReceived(source: String, notification: Boolean) {
         diagnostic(source, "EVENT", when {

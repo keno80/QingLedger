@@ -71,6 +71,7 @@ private fun CaptureDiagnosticsCard(capture: CaptureViewModel, zoneId: String) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(sourceLabel(item.sourcePackage) + " · " + Instant.ofEpochMilli(item.at).atZone(ZoneId.of(zoneId)).format(DateTimeFormatter.ofPattern("HH:mm:ss")) + " · " + CaptureDiagnosticLabels.stage(item.stage), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             Text(CaptureDiagnosticLabels.reason(item.reason) + (item.fields?.let { "（$it 项文字）" } ?: ""), fontSize = 13.sp)
+                            item.details?.let { Text(it, fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary) }
                         }
                     }
                 }

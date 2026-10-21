@@ -1,6 +1,7 @@
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeNotificationStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
     android:notificationTimeout="250"
     android:packageNames="com.eg.android.AlipayGphone,com.tencent.mm,io.qingledger.paymentsimulator"
     android:canRetrieveWindowContent="true"
