@@ -13,6 +13,15 @@ import org.junit.*
 import org.junit.Assert.*
 
 class AlipayCaptureRuntimeTest {
+    @Test fun packagedAccessibilityConfigIncludesNotificationAndWindowEvents() {
+        val xml = context.resources.getXml(io.qingledger.automation.R.xml.ledger_accessibility_service)
+        xml.use {
+            while (it.eventType != org.xmlpull.v1.XmlPullParser.START_TAG) it.next()
+            val types = it.getAttributeIntValue("http://schemas.android.com/apk/res/android", "accessibilityEventTypes", 0)
+            assertTrue(types and android.view.accessibility.AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED != 0)
+            assertTrue(types and android.view.accessibility.AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED != 0)
+        }
+    }
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private val source = "com.eg.android.AlipayGphone"
     private lateinit var repository: MemoryCapture
@@ -25,6 +34,26 @@ class AlipayCaptureRuntimeTest {
         Unit
     }
     @After fun teardown() { runtime.close() }
+    @Test fun diagnosticsExplainDisabledSourcesAndKeepBoundedMetadataOnly() = runBlocking {
+        runtime.accessibilityEventReceived("com.tencent.mm", false)
+        assertEquals("SOURCE_DISABLED", runtime.diagnostics.value.last().reason)
+        runtime.accessibilityEventReceived("unrelated.app", false)
+        assertEquals(1, runtime.diagnostics.value.size)
+        repeat(60) { runtime.diagnostic(source, "READ", "PAGE_READ", it) }
+        assertEquals(40, runtime.diagnostics.value.size)
+        assertEquals(59, runtime.diagnostics.value.last().fields)
+        repeat(10) { runtime.diagnostic(source, "RULE", "NO_SUCCESS_STATE") }
+        assertEquals(1, runtime.diagnostics.value.count { it.reason == "NO_SUCCESS_STATE" })
+        assertTrue(runtime.diagnostics.value.all { it.sourcePackage == source })
+    }
+    @Test fun recognizedAndRepeatedNoticesReportSavedAndDuplicateStages() = runBlocking {
+        val notification = notice("你有一笔19.01元的支出，点此查看详情。")
+        runtime.accessibilityNotificationPosted(source, notification, 10)
+        withTimeout(5000) { runtime.diagnostics.first { it.any { d -> d.reason == "AUTO_POSTED" } } }
+        runtime.accessibilityNotificationPosted(source, notification, 10)
+        withTimeout(5000) { runtime.diagnostics.first { it.any { d -> d.reason == "DUPLICATE" } } }
+        assertEquals(1, repository.received.value.size)
+    }
     private fun notice(text: String, time: Long = 1000L) = Notification.Builder(context, "test")
         .setContentTitle(if (text.contains("退款")) "退款提醒" else "交易提醒")
         .setContentText(text).setWhen(time).build()

@@ -32,6 +32,7 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val runtimeError = runtime.error
     val lastEvent = runtime.lastEvent
+    val diagnostics = runtime.diagnostics
     fun notificationsEnabled() = runtime.notificationsEnabled()
     fun promotionAllowed() = runtime.promotionAllowed()
     private val accessState = MutableStateFlow(false)

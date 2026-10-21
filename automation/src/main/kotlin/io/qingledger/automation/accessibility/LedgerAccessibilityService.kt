@@ -23,9 +23,12 @@ class LedgerAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() { super.onServiceConnected(); runtime.accessibilityConnectionChanged(true) }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val source = event?.packageName?.toString() ?: return
+        runtime.accessibilityEventReceived(source, event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED)
         if (!runtime.acceptsAccessibility(source)) { activePage = null; paymentCache.clear(); pending?.cancel(); return }
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
-            (event.parcelableData as? Notification)?.let { runtime.accessibilityNotificationPosted(source, it, event.eventTime) }
+            val notice = event.parcelableData as? Notification
+            if (notice != null) runtime.accessibilityNotificationPosted(source, notice, event.eventTime)
+            else runtime.diagnostic(source, "READ", "NOTICE_PAYLOAD_UNAVAILABLE")
             return
         }
         if (pending?.isActive == true) return
@@ -34,11 +37,14 @@ class LedgerAccessibilityService : AccessibilityService() {
             if (!runtime.acceptsAccessibility(source)) return@launch
             val generation = runtime.settings.value.generation
             try {
-                val root = rootInActiveWindow ?: return@launch
-                if (root.packageName?.toString() != source) { paymentCache.clear(); return@launch }
+                val root = rootInActiveWindow ?: run { runtime.diagnostic(source, "READ", "ROOT_UNAVAILABLE"); return@launch }
+                if (root.packageName?.toString() != source) { runtime.diagnostic(source, "READ", "SOURCE_MISMATCH"); paymentCache.clear(); return@launch }
                 val snapshot = visibleText(root)
                 val text = snapshot.text
-                val proposal = AccessibilityRules.propose(text)
+                runtime.diagnostic(source, "READ", "PAGE_READ", text.lines().count { it.isNotBlank() })
+                val decision = AccessibilityRules.evaluate(text)
+                val proposal = decision.proposal
+                runtime.diagnostic(source, "RULE", decision.reason)
                 if (proposal == null) {
                     runtime.observePaymentPage(source, generation, text, snapshot.selected)
                     paymentCache.observe(source, generation, text, snapshot.selected, SystemClock.elapsedRealtime())
@@ -54,6 +60,7 @@ class LedgerAccessibilityService : AccessibilityService() {
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 runtime.reportAccessibilityError()
+                runtime.diagnostic(source, "READ", "READ_FAILED")
             }
         }
     }

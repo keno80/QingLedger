@@ -156,7 +156,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     screen == "csvimport" -> csvImportPage(importState, csvImport)
                     screen == "capture-permissions" -> item { CapturePermissionsScreen(capture) }
                     screen == "capture-sources" -> item { CaptureSourcesScreen(capture) }
-                    screen == "capture-logs" -> captureRecords(candidateRows, captureOverview.zoneId, captureLogFilter, { captureLogFilter = it }) { captureLogId = it.id }
+                    screen == "capture-logs" -> captureRecords(candidateRows, capture, captureOverview.zoneId, captureLogFilter, { captureLogFilter = it }) { captureLogId = it.id }
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture,
                             { session++; screen = "capture-permissions" },

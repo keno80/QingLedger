@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
@@ -17,8 +21,9 @@ import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-fun LazyListScope.captureRecords(rows: List<PendingCandidate>, zoneId: String, filter: Int, onFilter: (Int) -> Unit, onOpen: (PendingCandidate) -> Unit) {
+fun LazyListScope.captureRecords(rows: List<PendingCandidate>, capture: CaptureViewModel, zoneId: String, filter: Int, onFilter: (Int) -> Unit, onOpen: (PendingCandidate) -> Unit) {
     item("record-tabs") { LedgerSegmentedControl(listOf("全部", "已入账", "已跳过"), filter, onFilter) }
+    item("capture-diagnostics") { CaptureDiagnosticsCard(capture, zoneId) }
     val zone = ZoneId.of(zoneId)
     val grouped = rows.filter { CaptureDisplayRules.matches(it.state, filter) }.sortedWith(compareByDescending<PendingCandidate> { it.receivedAt }.thenBy { it.id })
         .groupBy { Instant.ofEpochMilli(it.receivedAt).atZone(zone).toLocalDate() }
@@ -38,6 +43,41 @@ fun LazyListScope.captureRecords(rows: List<PendingCandidate>, zoneId: String, f
         }
     }
     item("capture-record-note") { Text("先展示结果，点开查看原因。最多展示最近 200 条未隐藏记录。", Modifier.padding(top = 12.dp), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary) }
+}
+
+@Composable
+private fun CaptureDiagnosticsCard(capture: CaptureViewModel, zoneId: String) {
+    ObserveCaptureAccess(capture)
+    val rows by capture.diagnostics.collectAsStateWithLifecycle()
+    val settings by capture.settings.collectAsStateWithLifecycle()
+    val method by capture.method.collectAsStateWithLifecycle()
+    val access by capture.access.collectAsStateWithLifecycle()
+    val connected by capture.connected.collectAsStateWithLifecycle()
+    var show by remember { mutableStateOf(false) }
+    val status = CaptureDisplayRules.status(method, settings.enabled, access, connected, settings.sources.size)
+    val latest = rows.lastOrNull()
+    Column(Modifier.padding(top = 14.dp)) {
+        SettingsSection {
+            SettingsNavigationRow("采集诊断", latest?.let { sourceLabel(it.sourcePackage) + " · " + CaptureDiagnosticLabels.reason(it.reason) } ?: "${method.label} · $status · 暂无事件", LedgerIcons.Scan, { show = true })
+        }
+    }
+    LedgerBottomSheet(show, "采集诊断", { show = false }) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("${method.label} · $status", fontSize = 13.sp)
+            if (rows.isEmpty()) Text("尚未收到来源事件。请在已开启的来源中完成操作后返回查看。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            else Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                rows.asReversed().forEach { item ->
+                    SettingsSection {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(sourceLabel(item.sourcePackage) + " · " + Instant.ofEpochMilli(item.at).atZone(ZoneId.of(zoneId)).format(DateTimeFormatter.ofPattern("HH:mm:ss")) + " · " + CaptureDiagnosticLabels.stage(item.stage), fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                            Text(CaptureDiagnosticLabels.reason(item.reason) + (item.fields?.let { "（$it 项文字）" } ?: ""), fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+            Text("仅保留本次运行的最近 40 条状态，不保存页面原文。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
+    }
 }
 
 @Composable
