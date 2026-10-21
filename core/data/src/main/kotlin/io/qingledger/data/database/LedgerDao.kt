@@ -52,6 +52,11 @@ interface LedgerDao {
         AND occurredAt >= :start AND occurredAt < :end ORDER BY occurredAt DESC, id DESC""")
     fun monthlyTransactions(start: Long, end: Long): Flow<List<TransactionEntity>>
 
+    @Query("""SELECT * FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL
+        AND (:start IS NULL OR occurredAt >= :start) AND (:end IS NULL OR occurredAt < :end)
+        ORDER BY occurredAt DESC, id DESC""")
+    fun statisticsTransactions(start: Long?, end: Long?): Flow<List<TransactionEntity>>
+
     @Query("""SELECT COALESCE(SUM(CASE WHEN kind = 'INCOME' THEN amountMinor ELSE 0 END), 0) AS income,
         COALESCE(SUM(CASE WHEN kind = 'EXPENSE' THEN amountMinor WHEN kind = 'REFUND' THEN -amountMinor ELSE 0 END), 0) AS expense
         FROM transactions WHERE bookId = 'default' AND deletedAt IS NULL AND occurredAt >= :start AND occurredAt < :end""")

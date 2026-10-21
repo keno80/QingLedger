@@ -24,6 +24,20 @@ class RoomLedgerRepositoryTest {
     }
     @After fun teardown() { database.close() }
 
+    @Test fun statisticsRangesSupportAllTimeAndHalfOpenBoundariesWithoutPagination() = runBlocking {
+        repeat(101) { repository.save(TransactionDraft(TransactionKind.EXPENSE, 100, now)) }
+        repository.save(TransactionDraft(TransactionKind.INCOME, 200, period.end))
+        repository.save(TransactionDraft(TransactionKind.REFUND, 300, period.start))
+        val deleted = repository.save(TransactionDraft(TransactionKind.EXPENSE, 500, now))
+        repository.delete(deleted, 0)
+        assertEquals(103, repository.statisticsTransactions(null).first().size)
+        val current = repository.statisticsTransactions(period).first()
+        assertEquals(102, current.size)
+        assertEquals(9800L, LedgerRules.summarize(current).expense)
+        assertEquals(0L, LedgerRules.summarize(current).income)
+        assertEquals(1, repository.statisticsTransactions(PeriodRange(period.end, period.end + 1)).first().size)
+    }
+
     @Test fun statisticsReadsWholeMonthAndExcludesDeletedAndOutsidePeriod() = runBlocking {
         repeat(101) { repository.save(TransactionDraft(TransactionKind.EXPENSE, 100, now, categoryId = "expense-0")) }
         val deleted = repository.save(TransactionDraft(TransactionKind.EXPENSE, 500, now))

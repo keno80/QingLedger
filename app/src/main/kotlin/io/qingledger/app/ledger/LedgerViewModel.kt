@@ -23,7 +23,6 @@ data class LedgerUiState(
     val rows: List<LedgerTransaction> = emptyList(), val summary: LedgerSummary = LedgerSummary(),
     val categories: List<Category> = emptyList(), val accounts: List<Account> = emptyList(),
     val zoneId: String = ZoneId.systemDefault().id,
-    val monthlyRows: List<LedgerTransaction> = emptyList(),
 )
 data class AssetsUiState(val loading: Boolean = true, val rows: List<AccountBalance> = emptyList(), val summary: AssetSummary = AssetSummary(), val error: String? = null)
 
@@ -61,8 +60,8 @@ class LedgerViewModel(private val repository: LedgerRepository) : ViewModel() {
                 selection.value = selection.value.copy(month = YearMonth.now(ZoneId.of(zoneId)))
                 selection.flatMapLatest { current ->
                     val period = LedgerRules.period(current.month, ZoneId.of(zoneId))
-                    combine(repository.transactions(LedgerFilter(period, current.query, current.kind, current.categoryId, current.accountId, current.limit)), repository.summary(period), repository.categories, repository.accounts, repository.monthlyTransactions(period)) { rows, summary, categories, accounts, monthlyRows ->
-                        LedgerUiState(false, current, rows, summary, categories, accounts, zoneId, monthlyRows)
+                    combine(repository.transactions(LedgerFilter(period, current.query, current.kind, current.categoryId, current.accountId, current.limit)), repository.summary(period), repository.categories, repository.accounts) { rows, summary, categories, accounts ->
+                        LedgerUiState(false, current, rows, summary, categories, accounts, zoneId)
                     }
                 }.collect { mutableState.value = it }
             } catch (error: Exception) {

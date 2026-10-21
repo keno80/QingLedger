@@ -45,7 +45,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, capture: CaptureViewModel, data: DataManagementViewModel, csvImport: CsvImportViewModel) {
+fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, statistics: io.qingledger.app.statistics.StatisticsViewModel, capture: CaptureViewModel, data: DataManagementViewModel, csvImport: CsvImportViewModel) {
     var savedRoute by rememberSaveable { mutableStateOf(AppRoute.LEDGER.name) }
     val route = AppRoute.fromSavedValue(savedRoute)
     val stateHolder = rememberSaveableStateHolder()
@@ -55,6 +55,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     val dataState by data.state.collectAsStateWithLifecycle()
     val importState by csvImport.state.collectAsStateWithLifecycle()
     val searchState by searchLedger.state.collectAsStateWithLifecycle()
+    val statisticsState by statistics.state.collectAsStateWithLifecycle()
     val message by ledger.message.collectAsStateWithLifecycle()
     val busy by ledger.busy.collectAsStateWithLifecycle()
     val captureBusy by capture.busy.collectAsStateWithLifecycle()
@@ -82,7 +83,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     fun openTransaction(id: String, parent: String) { transactionParent = parent; selectedId = id; session++; screen = "detail"; ledger.clearMessage() }
 
     LaunchedEffect(dataState.restored) {
-        if (dataState.restored > 0) { ledger.reloadAfterRestore(); searchLedger.reloadAfterRestore(); capture.afterRestore() }
+        if (dataState.restored > 0) { ledger.reloadAfterRestore(); searchLedger.reloadAfterRestore(); statistics.reload(); capture.afterRestore() }
     }
 
     BackHandler(enabled = screen != "list" || route != AppRoute.LEDGER) {
@@ -155,7 +156,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                         captureEvents(candidateRows, capture) { selectedId = it; session++; screen = "candidate"; capture.clearMessage() }
                     }
                     route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
-                    route == AppRoute.STATISTICS -> item { StatisticsScreen(state, ledger) { openTransaction(it, "list") } }
+                    route == AppRoute.STATISTICS -> item { StatisticsScreen(statisticsState, statistics, state) { openTransaction(it, "list") } }
                     else -> item { MyScreen(overview, { referenceParent = "list"; session++; screen = "categories" }, { session++; screen = "assets" }, { session++; screen = "preferences" }, { ledger.clearMessage(); session++; screen = "data" }) }
                 }
             }

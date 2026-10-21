@@ -58,6 +58,14 @@ object LedgerIcons {
         moveTo(13f, 16f); lineTo(13f, 7f)
         moveTo(18f, 16f); lineTo(18f, 10f)
     }
+    val RingChart = icon("RingChart") {
+        moveTo(12f, 4f); curveTo(1.3f, 4f, 1.3f, 20f, 12f, 20f); curveTo(22.7f, 20f, 22.7f, 4f, 12f, 4f)
+        moveTo(12f, 4f); lineTo(12f, 12f); lineTo(20f, 12f)
+    }
+    val LineChart = icon("LineChart") {
+        moveTo(4f, 4f); lineTo(4f, 20f); lineTo(20f, 20f)
+        moveTo(7f, 15f); lineTo(11f, 10f); lineTo(15f, 13f); lineTo(20f, 6f)
+    }
     val Automation = icon("Automation") {
         moveTo(13f, 2f); lineTo(5f, 14f); lineTo(11f, 14f)
         lineTo(10f, 22f); lineTo(19f, 10f); lineTo(13f, 10f); close()

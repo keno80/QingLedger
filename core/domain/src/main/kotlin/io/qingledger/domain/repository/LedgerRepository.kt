@@ -22,6 +22,7 @@ interface LedgerRepository {
     val accounts: Flow<List<Account>>
     fun transactions(filter: LedgerFilter): Flow<List<LedgerTransaction>>
     fun monthlyTransactions(period: PeriodRange): Flow<List<LedgerTransaction>>
+    fun statisticsTransactions(period: PeriodRange?): Flow<List<LedgerTransaction>>
     fun summary(period: PeriodRange): Flow<LedgerSummary>
     fun overview(zoneId: String): Flow<LedgerOverview>
     fun accountBalances(): Flow<List<AccountBalance>>
