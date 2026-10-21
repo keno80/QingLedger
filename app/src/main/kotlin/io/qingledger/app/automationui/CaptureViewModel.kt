@@ -45,7 +45,8 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
         CaptureMethod.NOTIFICATION -> runtime.hasAccess()
         else -> false
     } }
-    fun selectMethod(method: CaptureMethod) = action { runtime.selectMethod(method); refreshAccess() }
+    fun hasAccessibilityAccess() = runtime.hasAccessibilityAccess()
+    fun selectMethod(method: CaptureMethod, onSelected: () -> Unit = {}) = action { runtime.selectMethod(method); refreshAccess(); onSelected() }
     fun reconnect() { refreshAccess(); runtime.requestReconnect() }
     fun afterRestore() { runtime.afterRestore(); clearMessage(); refreshAccess() }
     fun clearMessage() { messageState.value = null; runtime.clearError() }

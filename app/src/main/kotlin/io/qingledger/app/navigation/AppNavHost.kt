@@ -69,7 +69,6 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var accountToEdit by rememberSaveable { mutableStateOf<String?>(null) }
     var transactionParent by rememberSaveable { mutableStateOf("list") }
     var editorCategoryManagement by rememberSaveable { mutableStateOf(false) }
-    var captureSourcesParent by rememberSaveable { mutableStateOf("automation") }
     var captureLogFilter by rememberSaveable { mutableStateOf(0) }
     var captureLogId by rememberSaveable { mutableStateOf<String?>(null) }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
@@ -80,7 +79,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
         if (screen == "data") data.cancelPreview()
         if (screen == "csvimport") csvImport.reset()
         if (screen != "list") stateHolder.removeState(if (screen == "search") "ledger-search" else "$screen-$selectedId-$session")
-        screen = when (screen) { "csvimport" -> "data"; "candidate" -> "capture-logs"; "capture-sources" -> captureSourcesParent; "capture-permissions", "capture-logs" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
+        screen = when (screen) { "csvimport" -> "data"; "candidate" -> "capture-logs"; "capture-sources" -> "automation"; "capture-permissions", "capture-logs" -> "automation"; "automation", "appearance" -> "preferences"; "categories", "accounts" -> referenceParent; "detail", "edit" -> transactionParent; else -> "list" }
         selectedId = null
     }
     fun openEditor(id: String?) { if (id == null) transactionParent = "list"; selectedId = id; session++; screen = "edit"; ledger.clearMessage() }
@@ -155,13 +154,13 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
                     screen == "appearance" -> item { AppearanceScreen(themeMode, settingsRepository) }
                     screen == "data" -> item { DataManagementScreen(data, capture, busy || captureBusy || importState.busy) { source -> csvImport.reset(source); session++; screen = "csvimport" } }
                     screen == "csvimport" -> csvImportPage(importState, csvImport)
-                    screen == "capture-permissions" -> item { CapturePermissionsScreen(capture) { captureSourcesParent = "capture-permissions"; session++; screen = "capture-sources" } }
+                    screen == "capture-permissions" -> item { CapturePermissionsScreen(capture) }
                     screen == "capture-sources" -> item { CaptureSourcesScreen(capture) }
                     screen == "capture-logs" -> captureRecords(candidateRows, captureOverview.zoneId, captureLogFilter, { captureLogFilter = it }) { captureLogId = it.id }
                     screen == "automation" || route == AppRoute.AUTOMATION -> {
                         item("capture-controls") { AutomationScreen(capture,
                             { session++; screen = "capture-permissions" },
-                            { captureSourcesParent = "automation"; session++; screen = "capture-sources" },
+                            { session++; screen = "capture-sources" },
                             { captureLogFilter = 0; session++; screen = "capture-logs" }) }
                     }
                     route == AppRoute.LEDGER -> ledgerPage(state, ledger, { searchLedger.resetSearch(state.selection.month); session++; screen = "search" }, { openTransaction(it, "list") })
