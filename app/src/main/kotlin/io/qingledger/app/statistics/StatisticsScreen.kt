@@ -35,7 +35,6 @@ fun StatisticsScreen(state: StatisticsUiState, viewModel: StatisticsViewModel, l
     val chart = StatisticsChart.valueOf(chartName)
     var rank by rememberSaveable { mutableIntStateOf(0) }
     var rankLimit by rememberSaveable(state.selection, rank) { mutableIntStateOf(50) }
-    var scope by rememberSaveable { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf<StatisticsRanking?>(null) }
     val ranking = state.overview.ranking.filter { rank == 0 || it.kind == if (rank == 1) TransactionKind.INCOME else TransactionKind.EXPENSE }
     val selection = state.selection
@@ -45,7 +44,6 @@ fun StatisticsScreen(state: StatisticsUiState, viewModel: StatisticsViewModel, l
             if (selection.period != StatisticsPeriod.ALL) IconButton(onClick = { viewModel.move(-1) }, enabled = !state.loading, modifier = Modifier.size(36.dp)) { Icon(LedgerIcons.Back, "上一时段", modifier = Modifier.size(18.dp)) }
             Text(periodTitle(selection), fontSize = 12.sp, maxLines = 1)
             if (selection.period != StatisticsPeriod.ALL) IconButton(onClick = { viewModel.move(1) }, enabled = !state.loading, modifier = Modifier.size(36.dp)) { Icon(LedgerIcons.Next, "下一时段", modifier = Modifier.size(18.dp)) }
-            IconButton(onClick = { scope = true }, modifier = Modifier.size(36.dp)) { Text("⋯", fontSize = 24.sp) }
         }
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(18.dp)) {
             LedgerSegmentedControl(StatisticsPeriod.entries.map { it.label }, selection.period.ordinal, { viewModel.period(StatisticsPeriod.entries[it]) }, enabled = !state.loading)
@@ -70,9 +68,6 @@ fun StatisticsScreen(state: StatisticsUiState, viewModel: StatisticsViewModel, l
             }
         }
         if (ranking.size > rankLimit) Button(onClick = { rankLimit += 50 }, modifier = Modifier.fillMaxWidth()) { Text("加载更多") }
-    }
-    LedgerBottomSheet(show = scope, title = "统计口径", onDismissRequest = { scope = false }) {
-        Text("按账本时区统计日、周一至周日、自然年或全部账单。转账不计收支，退款按到账日期冲减支出；分类占比按同类正向净额计算。", fontSize = 14.sp)
     }
     val selected = selectedCategory
     LedgerBottomSheet(show = selected != null, title = selected?.let { categoryName(it, state) } ?: "分类账单", onDismissRequest = { selectedCategory = null }) {
