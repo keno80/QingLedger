@@ -88,6 +88,16 @@ class AlipayCaptureRuntimeTest {
         assertEquals(1, repository.received.value.size)
         assertEquals(2800L, repository.received.value.single().second.amountMinor)
     }
+    @Test fun ocrMerchantAndMatchedAccountSurviveTheRuntimeQueue() = runBlocking {
+        runtime.close()
+        repository = MemoryCapture("com.tencent.mm")
+        runtime = NotificationCaptureRuntime(context, repository)
+        withTimeout(5000) { runtime.settings.first { it.enabled } }
+        runtime.accessibilityPosted("com.tencent.mm", "context-success", "支付成功\n¥28.00", 4, "测试银行储蓄卡（1234）", "测试商户")
+        val row = withTimeout(5000) { repository.received.first { it.isNotEmpty() } }.single()
+        assertEquals("测试商户", row.second.merchantName)
+        assertEquals("测试银行储蓄卡（1234）", row.second.accountName)
+    }
     @Test fun summariesAndUnknownNoticesAreIgnoredButExpandedReceiptIsParsed() = runBlocking {
         val text = "你有一笔19.01元的支出，点此查看详情。"
         val grouped = notice(text).apply { flags = flags or Notification.FLAG_GROUP_SUMMARY }

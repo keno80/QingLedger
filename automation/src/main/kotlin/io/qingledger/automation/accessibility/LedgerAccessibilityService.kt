@@ -18,8 +18,11 @@ class LedgerAccessibilityService : AccessibilityService() {
     private var activePage: String? = null
     private var session = ""
     private val paymentCache = PaymentSessionCache()
+    private val ocrPaymentCache = OcrPaymentContextCache()
+    private var contextExpiry: Job? = null
     private val screenshotGate = AccessibilityScreenshotGate(cooldownMs = 2_000)
     private var activeAccount: String? = null
+    private var activeMerchant: String? = null
     private var pageWindow = -1
     private var pageClass: String? = null
 
@@ -27,7 +30,7 @@ class LedgerAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val source = event?.packageName?.toString() ?: return
         runtime.accessibilityEventReceived(source, event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED)
-        if (!runtime.acceptsAccessibility(source)) { activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); pending?.cancel(); return }
+        if (!runtime.acceptsAccessibility(source)) { activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); clearOcrContext(); pending?.cancel(); return }
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             val notice = event.parcelableData as? Notification
             if (notice != null) runtime.accessibilityNotificationPosted(source, notice, event.eventTime)
@@ -73,25 +76,46 @@ class LedgerAccessibilityService : AccessibilityService() {
                 var text = snapshot.text
                 runtime.diagnostic(source, "READ", "PAGE_READ", text.lines().count { it.isNotBlank() })
                 var decision = chosen.decision
+                var image: AccessibilityScreenshotProbe.Result? = null
                 if (text.isBlank()) {
-                    val image = probeEmptyPage(source, generation, reading.windowId, eventDisplay) ?: return@launch
-                    text = image.receiptText ?: return@launch
+                    image = probeEmptyPage(source, generation, reading.windowId, eventDisplay) ?: return@launch
+                    val paymentPage = image.paymentPage
+                    if (paymentPage != null) {
+                        ocrPaymentCache.observe(source, generation, paymentPage, SystemClock.elapsedRealtime())
+                        if (paymentPage.context != null) {
+                            paymentCache.clear()
+                            contextExpiry?.cancel()
+                            contextExpiry = scope.launch { delay(120_001); ocrPaymentCache.clear() }
+                        } else if (paymentPage.reason != "PAYMENT_METHOD_LIST") contextExpiry?.cancel()
+                        activePage = null; activeAccount = null; activeMerchant = null
+                        return@launch
+                    }
+                    if (image.receiptText == null) {
+                        if (!image.reason.startsWith("SCREENSHOT_") && image.reason !in setOf("OCR_BUSY", "OCR_TIMEOUT", "OCR_FAILED")) clearOcrContext()
+                        return@launch
+                    }
+                    text = image.receiptText
                     decision = AccessibilityRules.evaluate(text)
                 }
                 val proposal = decision.proposal
                 runtime.diagnostic(source, "RULE", decision.reason)
                 if (proposal == null) {
+                    if (!text.contains("选择付款方式")) clearOcrContext()
                     runtime.observePaymentPage(source, generation, text, snapshot.selected)
                     paymentCache.observe(source, generation, text, snapshot.selected, SystemClock.elapsedRealtime())
-                    activePage = null; activeAccount = null; return@launch
+                    activePage = null; activeAccount = null; activeMerchant = null; return@launch
                 }
                 val identity = "$source|${reading.windowId}|${proposal.kind}|${proposal.amountMinor}"
                 if (activePage != identity) {
                     activePage = identity; session = UUID.randomUUID().toString()
                     val remembered = paymentCache.consume(source, generation, proposal, SystemClock.elapsedRealtime())
-                    activeAccount = proposal.accountName ?: remembered.takeIf { !text.contains("付款方式") }
+                    val context = ocrPaymentCache.consume(source, generation, proposal, image?.merchantName, SystemClock.elapsedRealtime())
+                    contextExpiry?.cancel()
+                    activeAccount = proposal.accountName ?: context?.accountName ?: remembered.takeIf { !text.contains("付款方式") }
+                    activeMerchant = image?.merchantName ?: context?.merchant
+                    if (context != null) runtime.diagnostic(source, "RULE", "PAYMENT_CONTEXT_MATCHED", details = "商户 ${activeMerchant != null} · 账户 ${activeAccount != null}")
                 }
-                runtime.accessibilityPosted(source, session, text, generation, activeAccount)
+                runtime.accessibilityPosted(source, session, text, generation, activeAccount, activeMerchant)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 runtime.reportAccessibilityError()
@@ -99,6 +123,7 @@ class LedgerAccessibilityService : AccessibilityService() {
             }
         }
     }
+    private fun clearOcrContext() { contextExpiry?.cancel(); ocrPaymentCache.clear() }
     private suspend fun probeEmptyPage(source: String, generation: Long, window: Int, display: Int): AccessibilityScreenshotProbe.Result? {
         fun stillCurrent(): Boolean {
             if (!runtime.acceptsAccessibility(source) || runtime.settings.value.generation != generation) return false
@@ -128,7 +153,8 @@ class LedgerAccessibilityService : AccessibilityService() {
         }
         runtime.diagnostic(source, if (result.reason.startsWith("SCREENSHOT_")) "IMAGE" else "OCR", result.reason, result.fields, result.details)
         if (!recognize && source == "com.tencent.mm" && result.reason == "SCREENSHOT_READY") runtime.diagnostic(source, "OCR", "OCR_UNSUPPORTED_PAGE")
-        if (result.receiptText == null) { activePage = null; activeAccount = null }
+        if (result.receiptText == null) { activePage = null; activeAccount = null; activeMerchant = null }
+        if (!recognize && source == "com.tencent.mm") clearOcrContext()
         return result
     }
     private class AndroidPageNode(private val node: AccessibilityNodeInfo) : AccessiblePageNode {
@@ -143,6 +169,6 @@ class LedgerAccessibilityService : AccessibilityService() {
         override val childCount get() = node.childCount
         override fun child(index: Int): AccessiblePageNode? = node.getChild(index)?.let(::AndroidPageNode)
     }
-    override fun onInterrupt() { pending?.cancel(); activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); runtime.accessibilityConnectionChanged(false) }
-    override fun onDestroy() { scope.cancel(); paymentCache.clear(); runtime.accessibilityConnectionChanged(false); super.onDestroy() }
+    override fun onInterrupt() { pending?.cancel(); activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); clearOcrContext(); runtime.accessibilityConnectionChanged(false) }
+    override fun onDestroy() { scope.cancel(); paymentCache.clear(); clearOcrContext(); runtime.accessibilityConnectionChanged(false); super.onDestroy() }
 }

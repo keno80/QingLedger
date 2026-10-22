@@ -5,7 +5,7 @@ data class CapturedNotification(
     val sourcePackage: String, val profileKey: String, val sessionKey: String,
     val digest: String, val receivedAt: Long, val versionCode: Long?, val generation: Long,
 )
-data class NotificationProposal(val amountMinor: Long?, val kind: TransactionKind?, val reason: String, val accountName: String? = null)
+data class NotificationProposal(val amountMinor: Long?, val kind: TransactionKind?, val reason: String, val accountName: String? = null, val merchantName: String? = null)
 data class PendingCandidate(
     val id: String, val sourcePackage: String, val versionCode: Long?, val receivedAt: Long,
     val amountMinor: Long?, val kind: TransactionKind?, val reason: String,

@@ -55,7 +55,13 @@ class RoomCaptureRepository(
             else -> {
                 ledger.initialize()
                 val accountId = proposal.accountName?.let(PaymentAccountRules::canonicalName)?.let { name ->
-                    val matches = database.ledgerDao().allAccounts().filter { it.name.equals(name, ignoreCase = true) }
+                    val accounts = database.ledgerDao().allAccounts()
+                    val exact = accounts.filter { it.name.equals(name, ignoreCase = true) }
+                    val identity = PaymentAccountRules.bankIdentity(name)
+                    val matches = if (exact.isNotEmpty() || identity == null) exact else accounts.filter {
+                        PaymentAccountRules.bankIdentity(it.name) == identity &&
+                            (PaymentAccountRules.unspecifiedBankType(name) || PaymentAccountRules.unspecifiedBankType(it.name))
+                    }
                     when {
                         matches.size == 1 && !matches.single().archived -> matches.single().id
                         matches.isNotEmpty() -> null
@@ -63,6 +69,7 @@ class RoomCaptureRepository(
                     }
                 }
                 val transactionId = ledger.save(TransactionDraft(kind!!, amount!!, event.receivedAt,
+                    merchant = proposal.merchantName?.trim()?.take(128).orEmpty(),
                     accountId = accountId,
                     note = if (event.sessionKey.startsWith("a11y:")) "自动采集：无障碍，时间为页面识别时间。" else ""))
                 dao.markSource(transactionId, event.sourcePackage)

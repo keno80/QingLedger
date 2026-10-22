@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class OcrReceiptRulesTest {
+    @Test fun receiptMerchantComesOnlyFromUniqueCentralLineBeforeAmount() {
+        val amount = OcrReceiptLine("¥28.00", 300, 550, 700, 650)
+        val result = OcrReceiptRules.evaluate(listOf(line("支付成功", 300), line("测试商户", 420), amount, line("优惠券", 1000)), 2000)
+        assertEquals("测试商户", result.merchant)
+        assertNull(OcrReceiptRules.evaluate(listOf(line("支付成功", 300), line("测试商户", 380), line("另一说明", 450), amount), 2000).merchant)
+    }
     @Test fun onlyAdaptedWechatReceiptActivityUsesOcrNotChatOrImageViewer() {
         assertTrue(OcrReceiptRules.supportsPage("com.tencent.mm", "com.tencent.mm.plugin.lite.ui.WxaLiteAppTransparentLiteUI"))
         assertTrue(OcrReceiptRules.supportsPage("com.tencent.mm", null))

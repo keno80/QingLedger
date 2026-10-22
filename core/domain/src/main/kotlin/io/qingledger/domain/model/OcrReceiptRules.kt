@@ -6,7 +6,7 @@ object OcrReceiptRules {
     // In that case the visual receipt checks below remain mandatory.
     fun supportsPage(source: String, activity: String?) = source == "com.tencent.mm" &&
         (activity == null || activity == "com.tencent.mm.plugin.lite.ui.WxaLiteAppTransparentLiteUI")
-    data class Result(val reason: String, val receiptText: String? = null)
+    data class Result(val reason: String, val receiptText: String? = null, val merchant: String? = null)
     // Chinese ML Kit can read the yuan glyph as Y. Normalize only a complete
     // decimal amount line inside the verified receipt region, never arbitrary text.
     private val amount = Regex("^[¥￥Y]([0-9]{1,12}\\.[0-9]{2})$")
@@ -53,6 +53,8 @@ object OcrReceiptRules {
         if (candidates.size > 1) return Result("AMBIGUOUS_AMOUNT")
         val value = candidates.singleOrNull()?.takeIf { it.toBigDecimal() > java.math.BigDecimal.ZERO } ?: return Result("MISSING_AMOUNT")
         // Only the verified success/amount pair enters existing rules; discard promotional text.
-        return Result("RECOGNIZED", "${state.text}\n¥$value")
+        val amountLine = region.firstOrNull { it.text == value || amount.matchEntire(it.text)?.groupValues?.get(1) == value }
+        val merchant = amountLine?.let { OcrMerchantRules.pick(ordered, state.bottom, it.top, it) }
+        return Result("RECOGNIZED", "${state.text}\n¥$value", merchant)
     }
 }

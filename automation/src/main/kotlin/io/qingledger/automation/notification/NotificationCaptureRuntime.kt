@@ -31,7 +31,7 @@ class NotificationCaptureRuntime(
     val method = mutableMethod.asStateFlow()
     private val methodMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private data class Queued(val event: CapturedNotification, val text: String, val method: CaptureMethod, val accountName: String? = null)
+    private data class Queued(val event: CapturedNotification, val text: String, val method: CaptureMethod, val accountName: String? = null, val merchantName: String? = null)
     private val queue = Channel<Queued>(128)
     private val sessions = ConcurrentHashMap<String, String>()
     private val paymentCache = PaymentSessionCache()
@@ -83,7 +83,7 @@ class NotificationCaptureRuntime(
             } }
         }
         scope.launch {
-            for ((event, text, origin, accountName) in queue) {
+            for ((event, text, origin, accountName, merchantName) in queue) {
                 var announced = false
                 try {
                     if (!isCurrent(event, origin)) { diagnostic(event.sourcePackage, "SAVE", "SETTINGS_CHANGED"); continue }
@@ -97,7 +97,7 @@ class NotificationCaptureRuntime(
                         liveNotification.started()
                         announced = true
                     }
-                    val proposal = parsed.copy(accountName = parsed.accountName ?: accountName)
+                    val proposal = parsed.copy(accountName = parsed.accountName ?: accountName, merchantName = parsed.merchantName ?: merchantName)
                     val version = try {
                         @Suppress("DEPRECATION")
                         app.packageManager.getPackageInfo(event.sourcePackage, 0).longVersionCode
@@ -147,13 +147,14 @@ class NotificationCaptureRuntime(
     fun reportAccessibilityError() { mutableError.value = "无障碍页面读取失败，可能存在未采集记录。" }
     fun acceptsAccessibility(source: String): Boolean = method.value == CaptureMethod.ACCESSIBILITY &&
         settings.value.enabled && source in accessibilitySources && source in settings.value.sources
-    fun accessibilityPosted(source: String, session: String, text: String, generation: Long, accountName: String? = null) {
+    fun accessibilityPosted(source: String, session: String, text: String, generation: Long, accountName: String? = null, merchantName: String? = null) {
         if (!acceptsAccessibility(source)) return
         // Alipay's page and notification do not share an order ID. Only its settled
         // notification writes a bill; never merge separate payments by amount/time.
         if (source == ALIPAY) { diagnostic(source, "RULE", "ALIPAY_NOTICE_REQUIRED"); return }
-        val event = CapturedNotification(source, Process.myUserHandle().toString(), "a11y:" + hash(session), hash(text + "|account:" + accountName.orEmpty()), System.currentTimeMillis(), null, generation)
-        if (queue.trySend(Queued(event, text.take(8192), CaptureMethod.ACCESSIBILITY, accountName)).isFailure) {
+        val merchant = merchantName?.trim()?.take(128)?.takeIf { it.isNotBlank() }
+        val event = CapturedNotification(source, Process.myUserHandle().toString(), "a11y:" + hash(session), hash(text + "|account:" + accountName.orEmpty() + "|merchant:" + merchant.orEmpty()), System.currentTimeMillis(), null, generation)
+        if (queue.trySend(Queued(event, text.take(8192), CaptureMethod.ACCESSIBILITY, accountName, merchant)).isFailure) {
             diagnostic(source, "SAVE", "QUEUE_FULL"); mutableError.value = "事件队列已满，可能存在未采集记录。"
         } else diagnostic(source, "RULE", "QUEUED")
     }

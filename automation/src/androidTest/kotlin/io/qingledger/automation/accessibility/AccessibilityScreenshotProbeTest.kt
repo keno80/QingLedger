@@ -76,7 +76,7 @@ class AccessibilityScreenshotProbeTest {
         val bitmap = Bitmap.createBitmap(1200, 2200, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(Color.WHITE)
         val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 80f }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 80f; typeface = ocrFixtureTypeface() }
         canvas.drawText("支付成功", 300f, 350f, paint)
         canvas.drawText("¥28.00", 300f, 650f, paint)
         paint.textSize = 50f

@@ -11,6 +11,29 @@ import org.junit.*
 import org.junit.Assert.*
 
 class RoomCaptureRepositoryTest {
+    @Test fun bankWithoutSubtypeMatchesOneExistingCardButNeverGuessesBetweenTwo() = runBlocking {
+        val first = ledger.saveAccount("测试银行储蓄卡（1234）")
+        enable()
+        capture.capture(event("untyped-one"), proposal.copy(accountName = "测试银行（1234）"))
+        val firstCandidate = capture.candidates.first().single()
+        assertEquals(first, ledger.get(firstCandidate.transactionId!!)!!.accountId)
+        ledger.saveAccount("测试银行信用卡（1234）")
+        capture.capture(event("untyped-two"), proposal.copy(accountName = "测试银行（1234）"))
+        val latest = capture.candidates.first().first { it.id != firstCandidate.id }
+        assertNull(ledger.get(latest.transactionId!!)!!.accountId)
+    }
+    @Test fun structuredMerchantAndAccountAreSavedOnlyWhenSuccessIsCaptured() = runBlocking {
+        enable()
+        val cache = OcrPaymentContextCache()
+        cache.observe(source, capture.settings.first().generation, OcrPaymentPageRules.Result("PAYMENT_CONTEXT_CAPTURED", OcrPaymentContext(1234, "测试商户", "测试银行储蓄卡（1234）")), 0)
+        assertTrue(capture.candidates.first().isEmpty())
+        assertEquals(0L, ledger.summary(period).first().expense)
+        val context = cache.consume(source, capture.settings.first().generation, proposal, "测试商户", 1000)!!
+        capture.capture(event(), proposal.copy(accountName = context.accountName, merchantName = context.merchant))
+        val row = ledger.get(capture.candidates.first().single().transactionId!!)!!
+        assertEquals("测试商户", row.merchant)
+        assertEquals(ledger.accounts.first().single { it.name == "测试银行储蓄卡（1234）" }.id, row.accountId)
+    }
     @Test fun reusedNotificationSessionDoesNotMergeRefundIntoExpense() = runBlocking {
         enable()
         capture.capture(event("notice:shared", "expense"), proposal)
