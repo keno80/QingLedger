@@ -70,6 +70,7 @@ class RoomCaptureRepository(
                 }
                 val transactionId = ledger.save(TransactionDraft(kind!!, amount!!, event.receivedAt,
                     merchant = proposal.merchantName?.trim()?.take(128).orEmpty(),
+                    originalAmountMinor = proposal.originalAmountMinor, discountMinor = proposal.discountMinor,
                     accountId = accountId,
                     note = if (event.sessionKey.startsWith("a11y:")) "自动采集：无障碍，时间为页面识别时间。" else ""))
                 dao.markSource(transactionId, event.sourcePackage)

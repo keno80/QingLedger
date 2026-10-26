@@ -24,7 +24,7 @@ class CsvImportParserTest {
     }
     @Test fun legacyThirteenColumnsAreAcceptedWithoutGuessingApostrophes() {
         val original = csv(row().copy(note = "=SUM(A1)"))
-        val legacy = original.lineSequence().take(2).joinToString("\r\n") { it.substringBeforeLast(',').substringBeforeLast(',') } + "\r\n"
+        val legacy = original.lineSequence().take(2).joinToString("\r\n") { line -> (1..4).fold(line) { value, _ -> value.substringBeforeLast(',') } } + "\r\n"
         val parsed = CsvImportParser.parse(legacy)
         assertTrue(parsed.legacy)
         assertEquals("'=SUM(A1)", parsed.records.single().note)
@@ -52,7 +52,7 @@ class CsvImportParserTest {
         assertEquals(1, CsvImportParser.parse(csv(row()) + "\r\n\r\n").totalRows)
     }
     @Test fun malformedProtectionMetadataIsReportedPerRow() {
-        val parsed = CsvImportParser.parse(csv(row()).replace("\"v3:\"", "\"v3:999999999999999999999\""))
+        val parsed = CsvImportParser.parse(csv(row()).replace("\"v4:\"", "\"v4:999999999999999999999\""))
         assertEquals("文本转义字段无效。", parsed.issues.single().message)
         assertTrue(parsed.records.isEmpty())
     }
@@ -63,7 +63,7 @@ class CsvImportParserTest {
     @Test fun refundLinkRoundTripsAndV2RemainsReadable() {
         val value = row("refund").copy(kind = TransactionKind.REFUND, originalExpenseId = "expense-1")
         assertEquals("expense-1", CsvImportParser.parse(csv(value)).records.single().originalExpenseId)
-        val v2 = csv(row()).replace("\"原支出ID\",", "").replace(",\"\",\"v3:", ",\"v2:")
+        val v2 = csv(row()).replace("\"原支出ID\",\"原价（元）\",\"优惠（元）\",", "").replace(",\"\",\"\",\"\",\"v4:", ",\"v2:")
         assertEquals("tx-1", CsvImportParser.parse(v2).records.single().id)
     }
 }

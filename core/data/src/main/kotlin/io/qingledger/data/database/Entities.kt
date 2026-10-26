@@ -38,6 +38,8 @@ data class TransactionEntity(
     val deletedAt: Long? = null,
     val sourcePackage: String? = null,
     val originalExpenseId: String? = null,
+    val originalAmountMinor: Long? = null,
+    val discountMinor: Long? = null,
 )
 
 @Entity(tableName = "transaction_edits", foreignKeys = [ForeignKey(entity = TransactionEntity::class, parentColumns = ["id"], childColumns = ["transactionId"])], indices = [Index("transactionId")])

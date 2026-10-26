@@ -27,7 +27,7 @@ internal object BackupCodec {
             }))
         }
         val json = payload.put("tables", tables).toString()
-        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 4)
+        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 5)
             .put("createdAt", snapshot.createdAt).put("sha256", digest(json)).put("payload", json).toString().toByteArray(Charsets.UTF_8)
             .also { require(it.size <= BackupRepository.MAX_BYTES) { "备份超过 16MB，当前版本暂不支持。" } }
     }
@@ -37,7 +37,8 @@ internal object BackupCodec {
         try {
             val envelope = parse(String(bytes, Charsets.UTF_8))
             val legacy = exactInteger(envelope.get("databaseVersion"), 3)
-            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && (legacy || exactInteger(envelope.get("databaseVersion"), 4))) { "备份格式或数据库版本不支持。" }
+            val withoutDiscount = legacy || exactInteger(envelope.get("databaseVersion"), 4)
+            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && (withoutDiscount || exactInteger(envelope.get("databaseVersion"), 5))) { "备份格式或数据库版本不支持。" }
             val payload = envelope.get("payload") as? String ?: error("Invalid payload")
             require(envelope.getString("sha256") == digest(payload)) { "备份校验失败，文件可能已损坏。" }
             val root = parse(payload)
@@ -49,7 +50,9 @@ internal object BackupCodec {
                 val table = input.getJSONObject(name)
                 val columns = expected.getValue(name)
                 val names = table.getJSONArray("columns")
-                val inputColumns = if (legacy && name == "transactions") columns.filter { it.name != "originalExpenseId" } else columns
+                val inputColumns = if (name == "transactions") columns.filterNot {
+                    (legacy && it.name == "originalExpenseId") || (withoutDiscount && it.name in setOf("originalAmountMinor", "discountMinor"))
+                } else columns
                 require((0 until names.length()).map { names.getString(it) } == inputColumns.map { it.name }) { "备份字段不匹配。" }
                 val rows = table.getJSONArray("rows")
                 count += rows.length()
@@ -65,7 +68,7 @@ internal object BackupCodec {
                             else -> { require(value is String && value.length <= 65536) { "备份文字格式无效。" }; value }
                         }
                     }
-                    if (inputColumns.size != columns.size) values + null else values
+                    columns.map { column -> inputColumns.indexOf(column).takeIf { it >= 0 }?.let { values[it] } }
                 })
             }
             val createdAt = envelope.get("createdAt")

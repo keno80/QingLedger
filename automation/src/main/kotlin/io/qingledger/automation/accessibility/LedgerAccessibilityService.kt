@@ -23,6 +23,7 @@ class LedgerAccessibilityService : AccessibilityService() {
     private val screenshotGate = AccessibilityScreenshotGate(cooldownMs = 2_000)
     private var activeAccount: String? = null
     private var activeMerchant: String? = null
+    private var activePrices = PaymentDiscount()
     private var pageWindow = -1
     private var pageClass: String? = null
 
@@ -87,7 +88,7 @@ class LedgerAccessibilityService : AccessibilityService() {
                             contextExpiry?.cancel()
                             contextExpiry = scope.launch { delay(120_001); ocrPaymentCache.clear() }
                         } else if (paymentPage.reason != "PAYMENT_METHOD_LIST") contextExpiry?.cancel()
-                        activePage = null; activeAccount = null; activeMerchant = null
+                        activePage = null; activeAccount = null; activeMerchant = null; activePrices = PaymentDiscount()
                         return@launch
                     }
                     if (image.receiptText == null) {
@@ -103,7 +104,7 @@ class LedgerAccessibilityService : AccessibilityService() {
                     if (!text.contains("选择付款方式")) clearOcrContext()
                     runtime.observePaymentPage(source, generation, text, snapshot.selected)
                     paymentCache.observe(source, generation, text, snapshot.selected, SystemClock.elapsedRealtime())
-                    activePage = null; activeAccount = null; activeMerchant = null; return@launch
+                    activePage = null; activeAccount = null; activeMerchant = null; activePrices = PaymentDiscount(); return@launch
                 }
                 val identity = "$source|${reading.windowId}|${proposal.kind}|${proposal.amountMinor}"
                 if (activePage != identity) {
@@ -113,9 +114,10 @@ class LedgerAccessibilityService : AccessibilityService() {
                     contextExpiry?.cancel()
                     activeAccount = proposal.accountName ?: context?.accountName ?: remembered.takeIf { !text.contains("付款方式") }
                     activeMerchant = image?.merchantName ?: context?.merchant
+                    activePrices = PaymentDiscount(context?.originalAmountMinor, context?.discountMinor)
                     if (context != null) runtime.diagnostic(source, "RULE", "PAYMENT_CONTEXT_MATCHED", details = "商户 ${activeMerchant != null} · 账户 ${activeAccount != null}")
                 }
-                runtime.accessibilityPosted(source, session, text, generation, activeAccount, activeMerchant)
+                runtime.accessibilityPosted(source, session, text, generation, activeAccount, activeMerchant, activePrices.originalAmountMinor, activePrices.discountMinor)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 runtime.reportAccessibilityError()
@@ -153,7 +155,7 @@ class LedgerAccessibilityService : AccessibilityService() {
         }
         runtime.diagnostic(source, if (result.reason.startsWith("SCREENSHOT_")) "IMAGE" else "OCR", result.reason, result.fields, result.details)
         if (!recognize && source == "com.tencent.mm" && result.reason == "SCREENSHOT_READY") runtime.diagnostic(source, "OCR", "OCR_UNSUPPORTED_PAGE")
-        if (result.receiptText == null) { activePage = null; activeAccount = null; activeMerchant = null }
+        if (result.receiptText == null) { activePage = null; activeAccount = null; activeMerchant = null; activePrices = PaymentDiscount() }
         if (!recognize && source == "com.tencent.mm") clearOcrContext()
         return result
     }

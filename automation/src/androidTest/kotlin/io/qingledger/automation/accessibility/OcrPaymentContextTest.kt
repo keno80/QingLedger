@@ -89,6 +89,8 @@ class OcrPaymentContextTest {
             args.getString("discount_expected_bank")?.let { assertEquals("Private bank name must match", it, result.paymentPage?.context?.accountName?.let(PaymentAccountRules::bankIdentity)?.first) }
             assertEquals(args.getString("discount_expected_minor")!!.toLong(), result.paymentPage?.context?.amountMinor)
             assertEquals(args.getString("discount_expected_merchant"), result.paymentPage?.context?.merchant)
+            args.getString("discount_expected_original_minor")?.let { assertEquals(it.toLong(), result.paymentPage?.context?.originalAmountMinor) }
+            args.getString("discount_expected_saving_minor")?.let { assertEquals(it.toLong(), result.paymentPage?.context?.discountMinor) }
             assertNull(result.receiptText)
         } finally { file.delete() }
     }

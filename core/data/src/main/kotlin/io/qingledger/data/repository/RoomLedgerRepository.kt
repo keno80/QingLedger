@@ -90,6 +90,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
             revision = (previous?.revision ?: -1) + 1, createdAt = previous?.createdAt ?: now, updatedAt = now,
             sourcePackage = previous?.sourcePackage,
             originalExpenseId = draft.originalExpenseId,
+            originalAmountMinor = draft.originalAmountMinor, discountMinor = draft.discountMinor,
         )
         validateRefunds(transaction)
         if (previous == null) dao.insert(transaction) else dao.update(transaction)
@@ -102,6 +103,7 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
             if (previous.occurredAt != transaction.occurredAt) add("时间")
             if (previous.note != transaction.note) add("备注")
             if (previous.originalExpenseId != transaction.originalExpenseId) add("退款关联")
+            if (previous.originalAmountMinor != transaction.originalAmountMinor || previous.discountMinor != transaction.discountMinor) add("优惠信息")
         }
         val operation = if (previous == null) "CREATE" else if (changed.isEmpty()) "EDIT" else "EDIT:" + changed.joinToString("、")
         dao.log(EditEntity(UUID.randomUUID().toString(), transaction.id, transaction.revision, operation, now))
@@ -132,5 +134,5 @@ class RoomLedgerRepository(private val database: LedgerDatabase, private val clo
         val live = dao.allTransactionsForBackup().filter { it.deletedAt == null && it.id != row.id } + row
         RefundRules.validate(live.map { it.domain() })?.let { throw IllegalArgumentException(it) }
     }
-    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId)
+    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId, originalAmountMinor, discountMinor)
 }

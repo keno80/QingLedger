@@ -118,7 +118,7 @@ class RoomBackupRepository(
                     val kind = TransactionKind.valueOf(row.kind)
                     require(row.currency == "CNY" && row.revision >= 0) { "备份账单无效。" }
                     ZoneId.of(row.zoneId)
-                    require(LedgerRules.validate(TransactionDraft(kind, row.amountMinor, row.occurredAt, row.merchant, row.categoryId, row.accountId, row.fromAccountId, row.toAccountId, row.note, row.originalExpenseId)) == null) { "备份账单内容无效。" }
+                    require(LedgerRules.validate(TransactionDraft(kind, row.amountMinor, row.occurredAt, row.merchant, row.categoryId, row.accountId, row.fromAccountId, row.toAccountId, row.note, row.originalExpenseId, row.originalAmountMinor, row.discountMinor)) == null) { "备份账单内容无效。" }
                     require(row.categoryId == null || categoryKinds[row.categoryId] == kind.categoryKind.name) { "备份分类关联无效。" }
                 }
                 val live = dao.allTransactionsForBackup().filter { it.deletedAt == null }.map { LedgerTransaction(it.id, TransactionKind.valueOf(it.kind), it.amountMinor, it.occurredAt, it.merchant, it.categoryId, it.accountId, it.fromAccountId, it.toAccountId, it.note, it.revision, it.zoneId, it.sourcePackage, it.originalExpenseId) }

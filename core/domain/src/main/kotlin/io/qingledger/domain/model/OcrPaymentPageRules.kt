@@ -1,6 +1,6 @@
 package io.qingledger.domain.model
 
-data class OcrPaymentContext(val amountMinor: Long, val merchant: String?, val accountName: String?)
+data class OcrPaymentContext(val amountMinor: Long, val merchant: String?, val accountName: String?, val originalAmountMinor: Long? = null, val discountMinor: Long? = null)
 object OcrPaymentPageRules {
     data class Result(val reason: String, val context: OcrPaymentContext? = null)
     fun evaluate(lines: List<OcrReceiptLine>, imageWidth: Int, imageHeight: Int): Result {
@@ -27,7 +27,8 @@ object OcrPaymentPageRules {
         val accountLines = ordered.filter { it.top >= label.bottom && it.bottom <= boundary }
         val candidates = accountLines.mapNotNull { line -> account(line, accountLines) }.distinct()
         val account = candidates.singleOrNull()
-        return Result(if (account == null) "PAYMENT_CONTEXT_PARTIAL" else "PAYMENT_CONTEXT_CAPTURED", OcrPaymentContext(amountMinor, merchant, account))
+        val prices = PaymentDiscountRules.fromOcr(ordered, amountMinor, amountLine.bottom, label.top)
+        return Result(if (account == null) "PAYMENT_CONTEXT_PARTIAL" else "PAYMENT_CONTEXT_CAPTURED", OcrPaymentContext(amountMinor, merchant, account, prices.originalAmountMinor, prices.discountMinor))
     }
 
     private fun account(line: OcrReceiptLine, rows: List<OcrReceiptLine>): String? {

@@ -19,7 +19,7 @@ class RoomCsvExportRepository(private val database: LedgerDatabase) : CsvExportR
                 val tx = row.transaction
                 LedgerCsvRow(tx.id, TransactionKind.valueOf(tx.kind), tx.amountMinor, tx.occurredAt, tx.zoneId, tx.currency,
                     row.categoryName.orEmpty(), row.accountName.orEmpty(), row.fromAccountName.orEmpty(), row.toAccountName.orEmpty(),
-                    tx.merchant, tx.note, tx.sourcePackage.orEmpty(), tx.originalExpenseId.orEmpty())
+                    tx.merchant, tx.note, tx.sourcePackage.orEmpty(), tx.originalExpenseId.orEmpty(), tx.originalAmountMinor, tx.discountMinor)
             }
         }
     }

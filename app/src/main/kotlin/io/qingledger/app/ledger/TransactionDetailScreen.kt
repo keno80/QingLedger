@@ -42,12 +42,14 @@ fun TransactionDetailScreen(row: LedgerTransaction, state: LedgerUiState, busy: 
                     Icon(if (row.kind == TransactionKind.TRANSFER) LedgerIcons.Next else LedgerIcons.Ledger, null, tint = LedgerColors.accentContent, modifier = Modifier.size(24.dp))
                 }
                 Text(row.merchant.ifBlank { if (row.kind == TransactionKind.TRANSFER) "账户转账" else category }, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(row.kind.label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Text(if (row.kind == TransactionKind.EXPENSE && (row.originalAmountMinor != null || row.discountMinor != null)) "实付支出" else row.kind.label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 Text((when (row.kind) { TransactionKind.EXPENSE -> "−"; TransactionKind.INCOME, TransactionKind.REFUND -> "+"; TransactionKind.TRANSFER -> "" }) + formatMoney(row.amountMinor), fontSize = 36.sp, fontWeight = FontWeight.SemiBold, color = amountColor)
                 Text(if (row.kind == TransactionKind.REFUND) "冲减支出" else if (history.any { it.operation == "IMPORT_CSV" }) "账单导入 · $source" else if (row.sourcePackage == null) "手动记账" else "自动记账 · $source", fontSize = 12.sp, color = LedgerColors.accentContent)
             }
         }
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(horizontal = 20.dp, vertical = 8.dp)) {
+            row.originalAmountMinor?.let { DetailField("原价", formatMoney(it)) }
+            row.discountMinor?.let { DetailField("优惠", formatMoney(it)) }
             if (row.kind != TransactionKind.TRANSFER) DetailField("分类", category)
             if (row.kind == TransactionKind.REFUND) DetailField("关联支出", if (row.originalExpenseId == null) "未关联" else state.rows.find { it.id == row.originalExpenseId }?.let { "${it.merchant.ifBlank { "支出" }} · ${formatMoney(it.amountMinor)}" } ?: "已关联原支出")
             if (row.kind == TransactionKind.TRANSFER) {

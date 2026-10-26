@@ -25,6 +25,8 @@ data class LedgerTransaction(
     val zoneId: String,
     val sourcePackage: String? = null,
     val originalExpenseId: String? = null,
+    val originalAmountMinor: Long? = null,
+    val discountMinor: Long? = null,
 )
 data class TransactionDraft(
     val kind: TransactionKind,
@@ -37,6 +39,8 @@ data class TransactionDraft(
     val toAccountId: String? = null,
     val note: String = "",
     val originalExpenseId: String? = null,
+    val originalAmountMinor: Long? = null,
+    val discountMinor: Long? = null,
 )
 data class PeriodRange(val start: Long, val end: Long)
 data class LedgerSummary(val income: Long = 0, val expense: Long = 0) {
@@ -57,6 +61,7 @@ object LedgerRules {
     )
     fun validate(draft: TransactionDraft): String? = when {
         draft.amountMinor !in 1..MAX_AMOUNT -> "金额需大于 0 且不超过 9999999999.99 元。"
+        PaymentDiscountRules.validate(draft.kind, draft.amountMinor, draft.originalAmountMinor, draft.discountMinor) != null -> PaymentDiscountRules.validate(draft.kind, draft.amountMinor, draft.originalAmountMinor, draft.discountMinor)
         draft.merchant.length > 128 -> "商户名称最多 128 个字符。"
         draft.note.length > 500 -> "备注最多 500 个字符。"
         draft.kind != TransactionKind.REFUND && draft.originalExpenseId != null -> "只有退款可以关联原支出。"

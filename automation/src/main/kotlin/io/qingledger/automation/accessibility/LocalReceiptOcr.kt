@@ -8,6 +8,8 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import io.qingledger.domain.model.OcrReceiptLine
 import io.qingledger.domain.model.OcrReceiptRules
 import io.qingledger.domain.model.OcrPaymentPageRules
+import io.qingledger.domain.model.PaymentDiscount
+import io.qingledger.domain.model.PaymentDiscountRules
 
 /** Bundled model; every input/crop remains in memory until its task completes. */
 internal object LocalReceiptOcr {
@@ -20,11 +22,21 @@ internal object LocalReceiptOcr {
         catch (_: Exception) { bitmap.recycle(); busy = false; complete(AccessibilityScreenshotProbe.Result("OCR_FAILED")); return }
         var enlarged: Bitmap? = null
         var finished = false
+        var supplementalPrices = PaymentDiscount()
         fun finish(lines: List<OcrReceiptLine>?) {
             if (finished) return
             finished = true
             val result = try {
-                if (lines == null) AccessibilityScreenshotProbe.Result("OCR_FAILED") else evaluate(lines, bitmap.width, bitmap.height)
+                if (lines == null) AccessibilityScreenshotProbe.Result("OCR_FAILED") else {
+                    val evaluated = evaluate(lines, bitmap.width, bitmap.height)
+                    val page = evaluated.paymentPage
+                    val context = page?.context
+                    if (context == null) evaluated else {
+                        val prices = PaymentDiscountRules.merge(context.amountMinor, PaymentDiscount(context.originalAmountMinor, context.discountMinor), supplementalPrices)
+                        evaluated.copy(details = "本地识别 ${lines.size} 行 · 商户 ${context.merchant != null} · 账户 ${context.accountName != null} · 原价 ${prices.originalAmountMinor != null} · 优惠 ${prices.discountMinor != null} · 未保存图片或识别原文",
+                            paymentPage = page.copy(context = context.copy(originalAmountMinor = prices.originalAmountMinor, discountMinor = prices.discountMinor)))
+                    }
+                }
             } catch (_: Exception) { AccessibilityScreenshotProbe.Result("OCR_FAILED") }
             finally { recognizer.close(); enlarged?.recycle(); bitmap.recycle(); busy = false }
             complete(result)
@@ -61,7 +73,11 @@ internal object LocalReceiptOcr {
                     val original = lines(task.result)
                     val payment = OcrPaymentPageRules.evaluate(original, bitmap.width, bitmap.height)
                     val controls = original.any { it.text.replace(" ", "").contains("使用密码") } && original.any { it.text.trim() in setOf("支付", "确认付款", "确认支付") }
-                    if (controls && payment.context?.accountName == null && bitmap.width <= 1600 && bitmap.height <= 3200) {
+                    val missingPrices = payment.context?.let { context ->
+                        original.any { it.text.trim() == "原价" } && context.originalAmountMinor == null ||
+                            original.any { it.text.trim() in setOf("优惠", "优惠金额") } && context.discountMinor == null
+                    } ?: false
+                    if (controls && (payment.context?.accountName == null || missingPrices) && bitmap.width <= 1600 && bitmap.height <= 3200) {
                         val top = bitmap.height * 35 / 100
                         // Keep validated amount, merchant and field geometry from the original pass.
                         val field = original.singleOrNull { Regex("^付款方式(?:更改)?[\\p{P}\\p{S}]*$").matches(it.text.replace(Regex("\\s+"), "")) }
@@ -75,6 +91,10 @@ internal object LocalReceiptOcr {
                                 else {
                                     val refined = lines(retry.result).filter { it.top >= 4 }.map {
                                         it.copy(left = it.left / 2, right = it.right / 2, top = top + it.top / 2, bottom = top + it.bottom / 2)
+                                    }
+                                    val retryContext = OcrPaymentPageRules.evaluate((original.filter { it.top < top } + refined).take(256), bitmap.width, bitmap.height).context
+                                    if (retryContext != null && retryContext.amountMinor == payment.context?.amountMinor) {
+                                        supplementalPrices = PaymentDiscount(retryContext.originalAmountMinor, retryContext.discountMinor)
                                     }
                                     refineAccountOrFinish((original.filter { it.top < keepAbove } + refined.filter { it.top >= keepAbove }).take(256))
                                 }
@@ -93,7 +113,7 @@ internal object LocalReceiptOcr {
     private fun evaluate(lines: List<OcrReceiptLine>, width: Int, height: Int): AccessibilityScreenshotProbe.Result {
         val payment = OcrPaymentPageRules.evaluate(lines, width, height)
         if (payment.reason != "NOT_CONFIRMATION") return AccessibilityScreenshotProbe.Result(payment.reason,
-            "本地识别 ${lines.size} 行 · 商户 ${payment.context?.merchant != null} · 账户 ${payment.context?.accountName != null} · 未保存图片或识别原文", fields = lines.size, paymentPage = payment)
+            "本地识别 ${lines.size} 行 · 商户 ${payment.context?.merchant != null} · 账户 ${payment.context?.accountName != null} · 原价 ${payment.context?.originalAmountMinor != null} · 优惠 ${payment.context?.discountMinor != null} · 未保存图片或识别原文", fields = lines.size, paymentPage = payment)
         val parsed = OcrReceiptRules.evaluate(lines, height)
         val states = lines.count { it.text.contains("支付成功") || it.text.contains("付款成功") }
         return AccessibilityScreenshotProbe.Result(parsed.reason,

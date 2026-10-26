@@ -57,13 +57,19 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
     var from by rememberSaveable { mutableStateOf(previous?.fromAccountId) }
     var to by rememberSaveable { mutableStateOf(previous?.toAccountId) }
     var originalId by rememberSaveable { mutableStateOf(previous?.originalExpenseId) }
+    fun moneyText(value: Long?) = value?.let { BigDecimal.valueOf(it, 2).toPlainString() }.orEmpty()
+    var originalAmount by rememberSaveable { mutableStateOf(moneyText(previous?.originalAmountMinor)) }
+    var discount by rememberSaveable { mutableStateOf(moneyText(previous?.discountMinor)) }
+    var pendingOriginal by rememberSaveable { mutableStateOf(originalAmount) }
+    var pendingDiscount by rememberSaveable { mutableStateOf(discount) }
+    var priceError by rememberSaveable { mutableStateOf<String?>(null) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     var panel by rememberSaveable { mutableStateOf<String?>(null) }
     var timeError by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingDate by rememberSaveable { mutableStateOf(date) }
     var pendingTime by rememberSaveable { mutableStateOf(time) }
     val focus = LocalFocusManager.current
-    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; panel = value; timeError = null }
+    fun openPanel(value: String) { focus.clearFocus(); pendingDate = date; pendingTime = time; pendingOriginal = originalAmount; pendingDiscount = discount; panel = value; timeError = null; priceError = null }
     fun accountName(id: String?) = state.accounts.find { it.id == id }?.name ?: "未指定账户"
     fun parseTime(day: String = date, clock: String = time): LocalDateTime? = try { LocalDateTime.of(LocalDate.parse(day), LocalTime.parse(clock)) } catch (_: DateTimeParseException) { null }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -72,6 +78,7 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                 val next = TransactionKind.entries[index]
                 if (kind.categoryKind != next.categoryKind) category = null
                 if (next != TransactionKind.REFUND) originalId = null
+                if (next != TransactionKind.EXPENSE) { originalAmount = ""; discount = "" }
                 kindName = next.name; kindSelected = true; error = null
             }, enabled = !busy)
             Row(Modifier.fillMaxWidth().heightIn(min = 96.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -122,6 +129,10 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                 EditorSelectionRow("转出账户", if (from == null) "请选择" else accountName(from), !busy) { openPanel("from") }
                 EditorSelectionRow("转入账户", if (to == null) "请选择" else accountName(to), !busy) { openPanel("to") }
             }
+            if (kind == TransactionKind.EXPENSE) EditorSelectionRow("优惠信息", buildList {
+                if (originalAmount.isNotBlank()) add("原价 ¥$originalAmount")
+                if (discount.isNotBlank()) add("优惠 ¥$discount")
+            }.joinToString(" · ").ifBlank { "未填写" }, !busy) { openPanel("prices") }
             EditorInputRow("商户 / 标题", merchant, { merchant = it.take(128) }, !busy)
             EditorSelectionRow("日期", date, !busy) { openPanel("date") }
             EditorSelectionRow("时间", time, !busy) { openPanel("time") }
@@ -136,6 +147,9 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                 if (!kindSelected) { error = "请先主动选择账单类型。"; return@Button }
                 val minor = LedgerRules.parseAmount(amount)
                 if (minor == null) { error = "请输入有效金额，最多两位小数。"; return@Button }
+                val originalPrice = if (kind == TransactionKind.EXPENSE && originalAmount.isNotBlank()) PaymentDiscountRules.parseAmount(originalAmount) else null
+                val discountPrice = if (kind == TransactionKind.EXPENSE && discount.isNotBlank()) PaymentDiscountRules.parseAmount(discount) else null
+                if (kind == TransactionKind.EXPENSE && (originalAmount.isNotBlank() && originalPrice == null || discount.isNotBlank() && discountPrice == null)) { error = "原价或优惠金额格式无效。"; return@Button }
                 val localTime = parseTime()
                 if (localTime == null) { error = "日期或时间格式不正确。"; return@Button }
                 if (zone.rules.getValidOffsets(localTime).isEmpty()) { error = "该时间在所选时区不存在。"; return@Button }
@@ -144,15 +158,36 @@ fun TransactionEditor(state: LedgerUiState, previous: LedgerTransaction?, busy: 
                     accountId = if (kind == TransactionKind.TRANSFER) null else account,
                     fromAccountId = if (kind == TransactionKind.TRANSFER) from else null,
                     toAccountId = if (kind == TransactionKind.TRANSFER) to else null, note = note,
-                    originalExpenseId = if (kind == TransactionKind.REFUND) originalId else null)
+                    originalExpenseId = if (kind == TransactionKind.REFUND) originalId else null,
+                    originalAmountMinor = originalPrice, discountMinor = discountPrice)
                 error = LedgerRules.validate(draft)
                 if (error == null) onSave(draft)
             }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary(), minHeight = 48.dp) { Text(if (busy) "保存中…" else saveLabel) }
         }
     }
-    val panelTitle = when (panel) { "original" -> "关联原支出"; "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; "date" -> "选择日期"; else -> "选择时间" }
+    val panelTitle = when (panel) { "prices" -> "优惠信息"; "original" -> "关联原支出"; "account" -> "选择资金账户"; "from" -> "选择转出账户"; "to" -> "选择转入账户"; "date" -> "选择日期"; else -> "选择时间" }
     LedgerBottomSheet(show = panel != null, title = panelTitle, onDismissRequest = { if (!busy) panel = null }) {
-        if (panel == "original") {
+        if (panel == "prices") {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                EditorInputRow("原价（元）", pendingOriginal, { pendingOriginal = it; priceError = null }, !busy, keyboardType = KeyboardType.Decimal)
+                EditorInputRow("优惠（元）", pendingDiscount, { pendingDiscount = it; priceError = null }, !busy, divider = false, keyboardType = KeyboardType.Decimal)
+                priceError?.let { Text(it, fontSize = 13.sp, color = LedgerColors.expense) }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { focus.clearFocus(); panel = null }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("取消") }
+                    Button(onClick = {
+                        val paid = LedgerRules.parseAmount(amount)
+                        val original = pendingOriginal.takeIf { it.isNotBlank() }?.let(PaymentDiscountRules::parseAmount)
+                        val saving = pendingDiscount.takeIf { it.isNotBlank() }?.let(PaymentDiscountRules::parseAmount)
+                        priceError = when {
+                            pendingOriginal.isNotBlank() && original == null || pendingDiscount.isNotBlank() && saving == null -> "请输入有效金额，最多两位小数。"
+                            paid == null && (original != null || saving != null) -> "请先填写实付金额。"
+                            else -> PaymentDiscountRules.validate(TransactionKind.EXPENSE, paid ?: 0, original, saving)
+                        }
+                        if (priceError == null) { originalAmount = moneyText(original); discount = moneyText(saving); error = null; focus.clearFocus(); panel = null }
+                    }, enabled = !busy, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColorsPrimary()) { Text("确定") }
+                }
+            }
+        } else if (panel == "original") {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item { Button(onClick = { originalId = null; panel = null }, modifier = Modifier.fillMaxWidth()) { Text("不关联") } }
                 item { Text("当前列表中的支出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary) }
@@ -216,11 +251,11 @@ private fun EditorSelectionRow(label: String, value: String, enabled: Boolean, s
 }
 
 @Composable
-private fun EditorInputRow(label: String, value: String, onValueChange: (String) -> Unit, enabled: Boolean, singleLine: Boolean = true, divider: Boolean = true) {
+private fun EditorInputRow(label: String, value: String, onValueChange: (String) -> Unit, enabled: Boolean, singleLine: Boolean = true, divider: Boolean = true, keyboardType: KeyboardType = KeyboardType.Text) {
     Row(Modifier.fillMaxWidth().heightIn(min = 54.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, Modifier.width(80.dp), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         Box(Modifier.weight(1f)) {
-            TextField(value, onValueChange, enabled = enabled, singleLine = singleLine,
+            TextField(value, onValueChange, enabled = enabled, singleLine = singleLine, keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = label }, insideMargin = DpSize(0.dp, 12.dp), colors = editorFieldColors(), cursorBrush = SolidColor(LedgerColors.accentContent), textStyle = TextStyle(fontSize = 12.sp, textAlign = TextAlign.End))
             if (value.isEmpty()) Text("可选", Modifier.align(Alignment.CenterEnd), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }

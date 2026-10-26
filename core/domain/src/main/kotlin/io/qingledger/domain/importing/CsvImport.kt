@@ -4,7 +4,8 @@ import io.qingledger.domain.model.*
 
 data class CsvImportRecord(val line: Int, val id: String, val kind: TransactionKind, val amountMinor: Long,
     val occurredAt: Long, val zoneId: String, val merchant: String, val note: String, val category: String,
-    val account: String, val fromAccount: String, val toAccount: String, val sourcePackage: String, val originalExpenseId: String? = null)
+    val account: String, val fromAccount: String, val toAccount: String, val sourcePackage: String, val originalExpenseId: String? = null,
+    val originalAmountMinor: Long? = null, val discountMinor: Long? = null)
 data class CsvImportIssue(val line: Int, val message: String)
 data class CsvParsedFile(val records: List<CsvImportRecord>, val issues: List<CsvImportIssue>, val totalRows: Int, val legacy: Boolean, val skipped: List<CsvImportIssue> = emptyList())
 enum class ImportSource(val title: String, val hint: String) {

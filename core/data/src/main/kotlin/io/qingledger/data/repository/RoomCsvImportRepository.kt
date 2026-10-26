@@ -85,7 +85,7 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
                 val choice = byKey.getValue(key).choice
                 when (choice.action) { CsvMappingAction.NONE -> null; CsvMappingAction.CREATE -> "create:$key"; else -> choice.id }
             }
-            LedgerTransaction(row.id, row.kind, row.amountMinor, row.occurredAt, row.merchant, draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, row.zoneId, row.sourcePackage, row.originalExpenseId)
+            LedgerTransaction(row.id, row.kind, row.amountMinor, row.occurredAt, row.merchant, draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, row.zoneId, row.sourcePackage, row.originalExpenseId, row.originalAmountMinor, row.discountMinor)
         }
         val all = live + proposed
         val byId = all.associateBy { it.id }
@@ -102,7 +102,7 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
         fun id(name: String, type: CsvReferenceType): String? = if (name.isEmpty()) null else resolve(Request(name, type, false).key)
         return TransactionDraft(row.kind, row.amountMinor, row.occurredAt, row.merchant,
             categoryId = if (row.kind == TransactionKind.TRANSFER) null else id(row.category, if (row.kind.categoryKind == TransactionKind.EXPENSE) CsvReferenceType.EXPENSE_CATEGORY else CsvReferenceType.INCOME_CATEGORY),
-            accountId = id(row.account, CsvReferenceType.ACCOUNT), fromAccountId = id(row.fromAccount, CsvReferenceType.ACCOUNT), toAccountId = id(row.toAccount, CsvReferenceType.ACCOUNT), note = row.note, originalExpenseId = row.originalExpenseId)
+            accountId = id(row.account, CsvReferenceType.ACCOUNT), fromAccountId = id(row.fromAccount, CsvReferenceType.ACCOUNT), toAccountId = id(row.toAccount, CsvReferenceType.ACCOUNT), note = row.note, originalExpenseId = row.originalExpenseId, originalAmountMinor = row.originalAmountMinor, discountMinor = row.discountMinor)
     }
     override suspend fun commit(plan: CsvImportPlan): CsvImportResult = withContext(Dispatchers.IO) {
         database.withTransaction {
@@ -129,12 +129,12 @@ class RoomCsvImportRepository(private val database: LedgerDatabase, private val 
                 val draft = draft(row) { ids[it] }
                 check(LedgerRules.validate(draft) == null) { "导入内容校验失败。" }
                 dao.insert(TransactionEntity(row.id, "default", row.kind.name, row.amountMinor, "CNY", row.occurredAt, row.zoneId, row.merchant,
-                    draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, now, now, sourcePackage = row.sourcePackage.takeIf { it.isNotBlank() }, originalExpenseId = row.originalExpenseId))
+                    draft.categoryId, draft.accountId, draft.fromAccountId, draft.toAccountId, row.note, 0, now, now, sourcePackage = row.sourcePackage.takeIf { it.isNotBlank() }, originalExpenseId = row.originalExpenseId, originalAmountMinor = row.originalAmountMinor, discountMinor = row.discountMinor))
                 dao.log(EditEntity(UUID.randomUUID().toString(), row.id, 0, "IMPORT_CSV", now))
             }
             RefundRules.validate(dao.allTransactionsForBackup().filter { it.deletedAt == null }.map { it.domain() })?.let { throw IllegalStateException(it) }
             CsvImportResult(ready.size, fresh.duplicates + fresh.skipped, fresh.invalid)
         }
     }
-    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId)
+    private fun TransactionEntity.domain() = LedgerTransaction(id, TransactionKind.valueOf(kind), amountMinor, occurredAt, merchant, categoryId, accountId, fromAccountId, toAccountId, note, revision, zoneId, sourcePackage, originalExpenseId, originalAmountMinor, discountMinor)
 }

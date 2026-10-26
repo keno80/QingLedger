@@ -114,13 +114,13 @@ class RefundRepositoryTest {
             val payload = JSONObject(envelope.getString("payload"))
             val table = payload.getJSONObject("tables").getJSONObject("transactions")
             val columns = table.getJSONArray("columns")
-            val index = (0 until columns.length()).single { columns.getString(it) == "originalExpenseId" }
-            val oldColumns = JSONArray(); (0 until columns.length()).filter { it != index }.forEach { oldColumns.put(columns.get(it)) }
+            val removed = (0 until columns.length()).filter { columns.getString(it) in setOf("originalExpenseId", "originalAmountMinor", "discountMinor") }
+            val oldColumns = JSONArray(); (0 until columns.length()).filter { it !in removed }.forEach { oldColumns.put(columns.get(it)) }
             table.put("columns", oldColumns)
             val rows = table.getJSONArray("rows")
             for (rowIndex in 0 until rows.length()) {
                 val row = rows.getJSONArray(rowIndex); val old = JSONArray()
-                (0 until row.length()).filter { it != index }.forEach { old.put(row.get(it)) }; rows.put(rowIndex,old)
+                (0 until row.length()).filter { it !in removed }.forEach { old.put(row.get(it)) }; rows.put(rowIndex,old)
             }
             val text = payload.toString()
             val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) }
