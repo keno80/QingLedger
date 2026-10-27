@@ -34,14 +34,15 @@ object ShizukuCaptureRules {
         val currentHeader = Regex("(?m)^WINDOW MANAGER POLICY STATE \\(dumpsys window policy\\)\\s*$")
             .findAll(rawDump).lastOrNull()
         val dump = if (currentHeader == null) rawDump else rawDump.substring(currentHeader.range.last + 1)
-        val focusMatches = Regex("(?m)^\\s*mCurrentFocus=Window\\{([a-fA-F0-9]+) u\\d+ ([^}\\s]+)}")
+        // Android ICU requires escaping literal closing braces; desktop Java accepts them.
+        val focusMatches = Regex("(?m)^\\s*mCurrentFocus=Window\\{([a-fA-F0-9]+) u\\d+ ([^}\\s]+)\\}")
             .findAll(dump).map { it.groupValues[1] to it.groupValues[2] }.distinct().toList()
         if (focusMatches.isEmpty()) return null
         val topIds = Regex("\\bmTopFocusedDisplayId=(\\d+)").findAll(dump)
             .mapNotNull { it.groupValues[1].toIntOrNull() }.distinct().toList()
         if (topIds.size > 1) return null
         val topDisplay = topIds.singleOrNull()
-        val headers = Regex("(?m)^\\s*Window #\\d+ Window\\{([a-fA-F0-9]+) u\\d+ ([^}\\s]+)}:")
+        val headers = Regex("(?m)^\\s*Window #\\d+ Window\\{([a-fA-F0-9]+) u\\d+ ([^}\\s]+)\\}:")
             .findAll(dump).toList()
         val candidates = focusMatches.mapNotNull { (token, component) ->
             val matching = headers.withIndex().filter { it.value.groupValues[1] == token && it.value.groupValues[2] == component }

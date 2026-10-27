@@ -2,6 +2,8 @@
 
 日期：2026-10-13。
 
+2026-10-27：0.8.1 修正桌面 Java 与 Android ICU 对正则字面量右花括号处理不一致的问题，新增实际 Android 运行时回归。正式应用的 Shizuku UserService 已在 Android 17 完成窗口 / 显示屏能力连接；同机管理器仍显示授权应用为 0，不能以列表计数替代实时服务端检查。没有新增 schema 变更。见 [连接验收](shizuku-connection-2026-10-27.md)。
+
 2026-10-27：0.8.0 引入 Shizuku API / Provider 13.1.5 与独立只读 UserService，增加 specialUse 前台服务承载今日收支和 Shizuku 采集；系统授权仍由用户操作。Room 5→6，备份读取兼容 3 / 4 / 5 / 6；旧配置保持直接入账。已构建，曾安装验证原生弹窗和迁移，最新交付构建设备已断开未再次安装，Shizuku 真正授权后的图像采集尚未验收。详细通过数、跳过项和设备边界见 [验收记录](automation-options-2026-10-27.md)。下文按历史阶段保留。
 
 2026-10-14：0.5.3 / 测试器 0.3.0 已构建安装，32 项领域测试及模拟跨页面回归通过。数据库测试 APK 安装出现 INSTALL_FAILED_USER_RESTRICTED，本轮 instrumentation 未重跑；不将历史 21 项结果计算为本轮通过数量。无 schema 或依赖变更，见 [重新验收](cross-page-payment-2026-10-14.md)。

@@ -76,7 +76,7 @@ class ShizukuCaptureController(
         .tag("qingledger-read-only-capture")
         .processNameSuffix("readonly_capture")
         .daemon(false)
-        .version(2)
+        .version(3)
 
     private val receivedListener = Shizuku.OnBinderReceivedListener { refreshStatus() }
     private val deadListener = Shizuku.OnBinderDeadListener {

@@ -3,5 +3,6 @@
     <application>
         <receiver android:name=".LiveUpdateProbeReceiver" android:exported="true" android:permission="android.permission.DUMP" />
         <receiver android:name=".ConfirmationProbeReceiver" android:exported="true" android:permission="android.permission.DUMP" />
+        <receiver android:name=".ShizukuProbeReceiver" android:exported="true" android:permission="android.permission.DUMP" />
     </application>
 </manifest>

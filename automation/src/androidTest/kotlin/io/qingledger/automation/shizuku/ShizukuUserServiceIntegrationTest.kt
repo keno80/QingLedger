@@ -57,7 +57,7 @@ class ShizukuUserServiceIntegrationTest {
             override fun onServiceDisconnected(name: ComponentName?) { remote = null }
         }
         val args = Shizuku.UserServiceArgs(ComponentName(app, ReadOnlyCaptureUserService::class.java))
-            .tag("qingledger-read-only-capture-device-test").processNameSuffix("readonly_capture_test").daemon(false).version(2)
+            .tag("qingledger-read-only-capture-device-test").processNameSuffix("readonly_capture_test").daemon(false).version(3)
         try {
             Shizuku.bindUserService(args, connection)
             assertTrue("UserService 连接超时", latch.await(10, TimeUnit.SECONDS))

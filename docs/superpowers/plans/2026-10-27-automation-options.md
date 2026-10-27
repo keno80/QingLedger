@@ -51,6 +51,6 @@
 
 - [x] 将新选项同步 `docs/qingledger-ui-preview.html`，保持用户确认的提案；规格状态改为已确认，更新版本及进度文档。
 - [x] 运行 `gradlew :core:domain:test :app:assembleDebug :core:data:assembleDebugAndroidTest :automation:assembleDebugAndroidTest`，确认退出码和报告。
-- [ ] 此前真机安装、数据库 87 项与 Android 报告 42 项已执行（其中 2 项 Shizuku 未授权跳过），原生确认弹窗对齐已核对。最新源码已构建，设备已断开；最终重新安装、新增 2 项 Android 测试、Shizuku 授权采集与跨应用悬浮窗仍需补验，详见验收记录。
+- [ ] 0.8.1 已构建安装，原生弹窗对齐此前已核对；领域 172 项与 Android 实际 44 项通过（独立测试包 Shizuku 授权条件跳过 2 项），数据库 87 项此前通过。正式应用 Shizuku 授权和窗口 / 显示屏能力探测已验证连接，真实交易截图全流程与跨应用悬浮窗仍需补验，详见连接排查记录。
 - [x] 两阶段审查：规格覆盖 / 兼容，再检查并发、资源释放、后台权限及数据安全。修复发现的问题，运行受影响验证。
 - [x] `git diff --check` 后暂存全部改动，中文 Conventional Commit，直接推送 main；仅在验证成功范围内声明完成。

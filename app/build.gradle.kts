@@ -15,8 +15,8 @@ android {
         manifestPlaceholders["appLabel"] = if (qaBuild) "轻账验证" else "轻账"
         minSdk = 30
         targetSdk = 37
-        versionCode = 47
-        versionName = "0.8.0"
+        versionCode = 48
+        versionName = "0.8.1"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -41,4 +41,5 @@ dependencies {
     implementation(compose.foundation)
     implementation(compose.ui)
     implementation(libs.miuix.ui)
+    debugImplementation("dev.rikka.shizuku:api:13.1.5")
 }
