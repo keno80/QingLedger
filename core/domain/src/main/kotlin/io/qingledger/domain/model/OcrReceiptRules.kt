@@ -1,12 +1,13 @@
 package io.qingledger.domain.model
 
 data class OcrReceiptLine(val text: String, val left: Int, val top: Int, val right: Int, val bottom: Int)
+data class OcrReceiptRegion(val top: Int, val bottom: Int)
 object OcrReceiptRules {
     // Some Lite pages expose only FrameLayout events, with no Activity identity.
     // In that case the visual receipt checks below remain mandatory.
     fun supportsPage(source: String, activity: String?) = source == "com.tencent.mm" &&
-        (activity == null || activity == "com.tencent.mm.plugin.lite.ui.WxaLiteAppTransparentLiteUI")
-    data class Result(val reason: String, val receiptText: String? = null, val merchant: String? = null)
+        (activity == null || activity == "com.tencent.mm.plugin.lite.ui.WxaLiteAppTransparentLiteUI" || activity == "com.tencent.mm.framework.app.UIPageFragmentActivity")
+    data class Result(val reason: String, val receiptText: String? = null, val merchant: String? = null, val region: OcrReceiptRegion? = null)
     // Chinese ML Kit can read the yuan glyph as Y. Normalize only a complete
     // decimal amount line inside the verified receipt region, never arbitrary text.
     private val amount = Regex("^[¥￥Y]([0-9]{1,12}\\.[0-9]{2})$")
@@ -25,13 +26,18 @@ object OcrReceiptRules {
         if (Regex("[$€£]|USD|HKD|JPY|EUR|美元|港币|日元").containsMatchIn(all)) return Result("UNSUPPORTED_CURRENCY")
         if (Regex("确认付款|确认支付|选择付款方式|使用密码|支付密码|待付款|支付中|支付失败|取消支付").containsMatchIn(all)) return Result("PAYMENT_IN_PROGRESS")
         if (Regex("交易记录|账单列表|历史记录|聊天记录").containsMatchIn(all)) return Result("HISTORY_PAGE")
-        if (Regex("转账|充值|提现|还款").containsMatchIn(all)) return Result("TRANSFER_REVIEW")
-        val states = ordered.filter { it.text == "支付成功" || it.text == "付款成功" }
+        if (Regex("充值|提现|还款").containsMatchIn(all)) return Result("TRANSFER_REVIEW")
+        val parties = ordered.mapNotNull { WeChatOutgoingRules.counterparty(it.text) }.distinct()
+        val paymentStates = ordered.filter { it.text == "支付成功" || it.text == "付款成功" }
+        val states = paymentStates.ifEmpty { ordered.filter { it.text in WeChatOutgoingRules.sentStates } }
+        if (all.contains("转账") && parties.isEmpty() && states.none { it.text in WeChatOutgoingRules.sentStates }) return Result("TRANSFER_REVIEW")
         if (states.isEmpty()) return Result("NO_SUCCESS_STATE")
+        if (states.any { it.text == "转账成功" } && parties.none { it.startsWith("转账给") }) return Result("TRANSFER_REVIEW")
         if (states.size != 1) return Result("AMBIGUOUS_DIRECTION")
         val state = states.single()
         if (state.top > imageHeight * 35 / 100) return Result("NO_SUCCESS_STATE")
-        val advertTop = ordered.firstOrNull { it.top > state.bottom && Regex("优惠|满减|领取|红包|领券|推荐|广告").containsMatchIn(it.text) }?.top ?: imageHeight
+        if (ordered.any { it.top < imageHeight / 4 && it.text in setOf("转账详情", "红包详情", "交易详情", "账单详情") }) return Result("HISTORY_PAGE")
+        val advertTop = ordered.firstOrNull { it.top > state.bottom && WeChatOutgoingRules.counterparty(it.text) == null && it.text !in WeChatOutgoingRules.sentStates && Regex("优惠|满减|领取|红包|领券|推荐|广告").containsMatchIn(it.text) }?.top ?: imageHeight
         val end = minOf(advertTop, state.bottom + imageHeight * 32 / 100)
         val region = ordered.filter { it.top >= state.bottom && it.bottom <= end }
         fun dominantAligned(line: OcrReceiptLine): Boolean =
@@ -55,6 +61,7 @@ object OcrReceiptRules {
         // Only the verified success/amount pair enters existing rules; discard promotional text.
         val amountLine = region.firstOrNull { it.text == value || amount.matchEntire(it.text)?.groupValues?.get(1) == value }
         val merchant = amountLine?.let { OcrMerchantRules.pick(ordered, state.bottom, it.top, it) }
-        return Result("RECOGNIZED", "${state.text}\n¥$value", merchant)
+        return Result("RECOGNIZED", "${if (state.text in WeChatOutgoingRules.sentStates) "支付成功" else state.text}\n¥$value", merchant ?: if (state.text.contains("红包")) "微信红包" else null,
+            amountLine?.let { OcrReceiptRegion(state.top, it.bottom) })
     }
 }

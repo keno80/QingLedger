@@ -11,6 +11,36 @@ import org.junit.*
 import org.junit.Assert.*
 
 class RoomCaptureRepositoryTest {
+    @Test fun legacyReceiptSeedsReplayAndDoesNotLoseItsAccountButFreshPaymentStillPosts() = runBlocking {
+        enable()
+        val legacy = "a11y:" + "a".repeat(64)
+        capture.capture(event(legacy), proposal.copy(merchantName = "测试商户", accountName = "微信零钱"))
+        val original = capture.candidates.first().single().transactionId!!
+        val history = capture.accessibilityReceipts("user-0")
+        assertEquals(1, history.size)
+        assertTrue(capture.accessibilityReceipts("other-profile").isEmpty())
+        val tracker = ReceiptSessionTracker("user-0") { "a11y:" + "b".repeat(64) }
+        history.forEach { tracker.seed(it.source, it.kind, it.amountMinor, it.merchant, it.session) }
+        val replay = tracker.success(source, proposal, "测试商户", 1, 1000)
+        capture.capture(event(replay.session, "returned-without-account"), proposal.copy(merchantName = "测试商户"))
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+        assertNotNull(ledger.get(original)!!.accountId)
+        tracker.confirmation(source, 1234, "测试商户", 1, 2000)
+        val fresh = tracker.success(source, proposal, "测试商户", 1, 3000)
+        capture.capture(event(fresh.session, "fresh"), proposal.copy(merchantName = "测试商户"))
+        assertEquals(2, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun replayOfADeletedBillNeverRestoresOrRecreatesIt() = runBlocking {
+        enable()
+        val session = "a11y:" + "c".repeat(64)
+        capture.capture(event(session), proposal.copy(merchantName = "测试商户"))
+        val id = capture.candidates.first().single().transactionId!!
+        ledger.delete(id, 0)
+        assertEquals(session, capture.accessibilityReceipts("user-0").single().session)
+        capture.capture(event(session, "revisited"), proposal)
+        assertNull(ledger.get(id))
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+    }
     @Test fun bankWithoutSubtypeMatchesOneExistingCardButNeverGuessesBetweenTwo() = runBlocking {
         val first = ledger.saveAccount("测试银行储蓄卡（1234）")
         enable()

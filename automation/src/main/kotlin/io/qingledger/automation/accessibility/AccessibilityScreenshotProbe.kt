@@ -10,7 +10,7 @@ import kotlin.coroutines.resume
 
 /** Captures into memory and optionally transfers bitmap ownership to local OCR. */
 internal object AccessibilityScreenshotProbe {
-    data class Result(val reason: String, val details: String? = null, val receiptText: String? = null, val fields: Int? = null, val merchantName: String? = null, val paymentPage: io.qingledger.domain.model.OcrPaymentPageRules.Result? = null)
+    data class Result(val reason: String, val details: String? = null, val receiptText: String? = null, val fields: Int? = null, val merchantName: String? = null, val paymentPage: io.qingledger.domain.model.OcrPaymentPageRules.Result? = null, val receiptVisual: String? = null)
 
     suspend fun capture(service: AccessibilityService, window: Int, display: Int, stillCurrent: () -> Boolean, recognize: Boolean = false, onImage: (Result) -> Unit = {}): Result {
         if (!stillCurrent()) return Result("SCREENSHOT_STALE")

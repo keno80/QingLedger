@@ -23,6 +23,9 @@ class RoomCaptureRepository(
         CaptureOverview(count, row?.let { PendingCandidate(it.id, it.sourcePackage, it.versionCode, it.receivedAt, it.amountMinor, it.kind?.let(TransactionKind::valueOf), it.reason, it.state, it.transactionId, it.relatedTransactionId) }, latest?.merchantName)
     }
     override suspend fun capturedState(event: CapturedNotification): String? = dao.replay(event.sessionKey, event.digest)?.state
+    override suspend fun accessibilityReceipts(profile: String) = dao.accessibilityReceipts(profile).map {
+        StoredAccessibilityReceipt(it.source, TransactionKind.valueOf(it.kind), it.amountMinor, it.merchant, it.session)
+    }
     override suspend fun setEnabled(enabled: Boolean) = database.withTransaction {
         dao.seed(CaptureConfiguration())
         dao.setEnabled(enabled)

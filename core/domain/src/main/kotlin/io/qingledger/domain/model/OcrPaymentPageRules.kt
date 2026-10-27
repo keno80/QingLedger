@@ -7,7 +7,7 @@ object OcrPaymentPageRules {
         val ordered = lines.take(256).filter { it.top >= 0 && it.bottom > it.top && it.bottom <= imageHeight && it.left >= 0 && it.right > it.left && it.right <= imageWidth }
             .map { it.copy(text = it.text.take(512).replace(Regex("\\s|\\u200b"), "")) }.sortedBy { it.top }
         val all = ordered.joinToString("\n") { it.text }
-        if (Regex("已取消|取消支付|支付失败|付款失败|交易失败").containsMatchIn(all)) return Result("PAYMENT_CONTEXT_CLEARED")
+        if (PaymentCapturePhaseRules.isFailure(all)) return Result("PAYMENT_CONTEXT_CLEARED")
         if (all.contains("选择付款方式")) return Result("PAYMENT_METHOD_LIST")
         val labels = ordered.filter { Regex("^付款方式(?:更改)?[\\p{P}\\p{S}]*$").matches(it.text) }
         if (labels.size != 1 || ordered.none { it.text in setOf("支付", "确认支付", "确认付款", "使用密码") }) return Result("NOT_CONFIRMATION")

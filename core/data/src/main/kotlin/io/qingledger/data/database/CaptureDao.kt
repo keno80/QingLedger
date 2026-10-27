@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CaptureDao {
+    @Query("SELECT DISTINCT c.sourcePackage AS source, c.kind AS kind, c.amountMinor AS amountMinor, t.merchant AS merchant, c.sessionKey AS session FROM notification_candidates c JOIN transactions t ON t.id = c.transactionId WHERE c.profileKey = :profile AND c.sessionKey LIKE 'a11y:%' AND c.kind IN ('EXPENSE','INCOME','REFUND') AND c.amountMinor IS NOT NULL AND c.amountMinor > 0 AND c.state IN ('AUTO_POSTED','MERGED','CONFIRMED') ORDER BY (t.accountId IS NOT NULL) DESC, c.receivedAt DESC LIMIT 64")
+    suspend fun accessibilityReceipts(profile: String): List<ReceiptHistoryRow>
     @Query("SELECT COUNT(DISTINCT transactionId) FROM notification_candidates WHERE state = 'AUTO_POSTED' AND receivedAt >= :start AND receivedAt < :end")
     fun postedCount(start: Long, end: Long): Flow<Int>
     @Query("SELECT c.*, t.merchant AS merchantName, a.name AS accountName FROM notification_candidates c LEFT JOIN transactions t ON t.id = c.transactionId LEFT JOIN accounts a ON a.id = t.accountId ORDER BY c.receivedAt DESC, c.id DESC LIMIT 1")
@@ -32,3 +34,4 @@ interface CaptureDao {
 }
 
 data class LatestCaptureRow(@Embedded val candidate: NotificationCandidateEntity, val merchantName: String?, val accountName: String?)
+data class ReceiptHistoryRow(val source: String, val kind: String, val amountMinor: Long, val merchant: String?, val session: String)

@@ -1,6 +1,7 @@
 package io.qingledger.domain.model
 
 data class CaptureSettings(val enabled: Boolean = false, val generation: Long = 0, val sources: Set<String> = emptySet())
+data class StoredAccessibilityReceipt(val source: String, val kind: TransactionKind, val amountMinor: Long, val merchant: String?, val session: String)
 data class CapturedNotification(
     val sourcePackage: String, val profileKey: String, val sessionKey: String,
     val digest: String, val receivedAt: Long, val versionCode: Long?, val generation: Long,

@@ -10,12 +10,14 @@ import io.qingledger.domain.model.OcrReceiptRules
 import io.qingledger.domain.model.OcrPaymentPageRules
 import io.qingledger.domain.model.PaymentDiscount
 import io.qingledger.domain.model.PaymentDiscountRules
+import io.qingledger.domain.model.PaymentCapturePhaseRules
 
 /** Bundled model; every input/crop remains in memory until its task completes. */
 internal object LocalReceiptOcr {
     private var busy = false
 
     fun read(bitmap: Bitmap, complete: (AccessibilityScreenshotProbe.Result) -> Unit) {
+        if (PaymentCapturePhaseRules.isTransientSurface(bitmap.width, bitmap.height)) { bitmap.recycle(); complete(AccessibilityScreenshotProbe.Result("OCR_TRANSIENT_SURFACE")); return }
         if (busy) { bitmap.recycle(); complete(AccessibilityScreenshotProbe.Result("OCR_BUSY")); return }
         busy = true
         val recognizer = try { TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build()) }
@@ -28,7 +30,7 @@ internal object LocalReceiptOcr {
             finished = true
             val result = try {
                 if (lines == null) AccessibilityScreenshotProbe.Result("OCR_FAILED") else {
-                    val evaluated = evaluate(lines, bitmap.width, bitmap.height)
+                    val evaluated = evaluate(lines, bitmap)
                     val page = evaluated.paymentPage
                     val context = page?.context
                     if (context == null) evaluated else {
@@ -110,13 +112,16 @@ internal object LocalReceiptOcr {
         line.boundingBox?.let { OcrReceiptLine(line.text, it.left, it.top, it.right, it.bottom) }
     }
 
-    private fun evaluate(lines: List<OcrReceiptLine>, width: Int, height: Int): AccessibilityScreenshotProbe.Result {
+    private fun evaluate(lines: List<OcrReceiptLine>, bitmap: Bitmap): AccessibilityScreenshotProbe.Result {
+        val width = bitmap.width; val height = bitmap.height
         val payment = OcrPaymentPageRules.evaluate(lines, width, height)
         if (payment.reason != "NOT_CONFIRMATION") return AccessibilityScreenshotProbe.Result(payment.reason,
             "本地识别 ${lines.size} 行 · 商户 ${payment.context?.merchant != null} · 账户 ${payment.context?.accountName != null} · 原价 ${payment.context?.originalAmountMinor != null} · 优惠 ${payment.context?.discountMinor != null} · 未保存图片或识别原文", fields = lines.size, paymentPage = payment)
+        if (PaymentCapturePhaseRules.isAuthentication(lines.joinToString("\n") { it.text })) return AccessibilityScreenshotProbe.Result("PAYMENT_AUTHENTICATION", fields = lines.size)
         val parsed = OcrReceiptRules.evaluate(lines, height)
         val states = lines.count { it.text.contains("支付成功") || it.text.contains("付款成功") }
         return AccessibilityScreenshotProbe.Result(parsed.reason,
-            "本地识别 ${lines.size} 行 · 成功字样 $states 行 · 商户 ${parsed.merchant != null} · 未保存图片或识别原文", parsed.receiptText, lines.size, merchantName = parsed.merchant)
+            "本地识别 ${lines.size} 行 · 成功字样 $states 行 · 商户 ${parsed.merchant != null} · 未保存图片或识别原文", parsed.receiptText, lines.size, merchantName = parsed.merchant,
+            receiptVisual = ReceiptVisualDigest.from(bitmap, parsed.region))
     }
 }

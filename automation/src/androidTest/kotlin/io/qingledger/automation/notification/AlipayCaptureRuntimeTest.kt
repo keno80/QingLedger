@@ -13,6 +13,20 @@ import org.junit.*
 import org.junit.Assert.*
 
 class AlipayCaptureRuntimeTest {
+    @Test fun restoredReceiptSessionIsNotRehashedWhenItsAccountIsMissing() = runBlocking {
+        runtime.close()
+        repository = MemoryCapture("com.tencent.mm")
+        runtime = NotificationCaptureRuntime(context, repository)
+        withTimeout(5000) { runtime.settings.first { it.enabled } }
+        val session = "a11y:" + "d".repeat(64)
+        runtime.accessibilityPosted("com.tencent.mm", session, "支付成功\n¥28.00", 4, "微信零钱", "测试商户")
+        val first = withTimeout(5000) { repository.received.first { it.isNotEmpty() } }.single()
+        assertEquals(session, first.first.sessionKey)
+        runtime.accessibilityPosted("com.tencent.mm", session, "支付成功\n¥28.00", 4, null, "测试商户")
+        val rows = withTimeout(5000) { repository.received.first { it.size == 2 } }
+        assertEquals(session, rows.last().first.sessionKey)
+        assertNotEquals(first.first.digest, rows.last().first.digest)
+    }
     @Test fun packagedAccessibilityConfigIncludesNotificationAndWindowEvents() {
         val xml = context.resources.getXml(io.qingledger.automation.R.xml.ledger_accessibility_service)
         xml.use {

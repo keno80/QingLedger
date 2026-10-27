@@ -5,6 +5,7 @@ class PaymentSessionCache {
     private var pending: Pending? = null
     fun observe(source: String, generation: Long, text: String, selected: List<String>, now: Long) {
         val content = text.take(8192)
+        if (PaymentCapturePhaseRules.isAuthentication(content) && !PaymentCapturePhaseRules.isFailure(content)) return
         if (!Regex("确认付款|选择付款方式|付款方式").containsMatchIn(content) ||
             Regex("(?m)^(支付成功|付款成功|收款成功|到账成功|付款失败|支付失败|已取消)$").containsMatchIn(content)) {
             clear(); return

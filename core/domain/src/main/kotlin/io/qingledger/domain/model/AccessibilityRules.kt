@@ -14,6 +14,7 @@ object AccessibilityRules {
         val content = text.take(8192).replace('\u00a0', ' ').replace("\u200b", "")
         fun reject(reason: String) = Decision(null, reason)
         if (content.isBlank()) return reject("PAGE_EMPTY")
+        WeChatOutgoingRules.propose(content)?.let { return Decision(it, "RECOGNIZED") }
         if (Regex("选择付款方式|确认付款|确认支付").containsMatchIn(content)) return reject("PAYMENT_IN_PROGRESS")
         if (Regex("交易记录|账单列表|历史记录|聊天记录").containsMatchIn(content)) return reject("HISTORY_PAGE")
         if (Regex("转账|充值|提现|还款").containsMatchIn(content)) return reject("TRANSFER_REVIEW")
