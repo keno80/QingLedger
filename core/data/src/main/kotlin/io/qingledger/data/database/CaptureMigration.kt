@@ -14,3 +14,14 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_notification_candidates_state_receivedAt ON notification_candidates (state, receivedAt)")
     }
 }
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE capture_configuration ADD COLUMN bookingMode TEXT NOT NULL DEFAULT 'DIRECT'")
+        db.execSQL("ALTER TABLE capture_configuration ADD COLUMN dailySummaryEnabled INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE notification_candidates ADD COLUMN merchant TEXT")
+        db.execSQL("ALTER TABLE notification_candidates ADD COLUMN accountName TEXT")
+        db.execSQL("ALTER TABLE notification_candidates ADD COLUMN originalAmountMinor INTEGER")
+        db.execSQL("ALTER TABLE notification_candidates ADD COLUMN discountMinor INTEGER")
+    }
+}

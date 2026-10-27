@@ -10,9 +10,11 @@ import io.qingledger.automation.notification.NotificationCaptureRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import io.qingledger.automation.shizuku.*
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class CaptureViewModel(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository) : ViewModel() {
+class CaptureViewModel(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository,
+    private val shizuku: ShizukuCaptureController, private val ensureBackground: () -> Boolean, private val showConfirmation: (String) -> Unit) : ViewModel() {
     private val refresh = MutableStateFlow(0)
     val overview = refresh.flatMapLatest {
         flow {
@@ -27,8 +29,10 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
     val candidates = repository.candidates.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val pendingCount = repository.pendingCount.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val method = runtime.method
-    val connected = combine(runtime.method, runtime.accessibilityConnected, runtime.connected) { method, accessibility, notification ->
-        when (method) { CaptureMethod.ACCESSIBILITY -> accessibility; CaptureMethod.NOTIFICATION -> notification; else -> false }
+    val shizukuStatus = shizuku.status
+    val shizukuIssue = shizuku.lastIssue
+    val connected = combine(runtime.method, runtime.accessibilityConnected, runtime.connected, shizuku.status) { method, accessibility, notification, status ->
+        when (method) { CaptureMethod.ACCESSIBILITY -> accessibility; CaptureMethod.NOTIFICATION -> notification; CaptureMethod.SHIZUKU -> status.state == ShizukuConnectionState.CONNECTED; else -> false }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val runtimeError = runtime.error
     val lastEvent = runtime.lastEvent
@@ -37,25 +41,36 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
     fun promotionAllowed() = runtime.promotionAllowed()
     private val accessState = MutableStateFlow(false)
     val access = accessState.asStateFlow()
+    init { viewModelScope.launch { shizuku.status.collect { if (method.value == CaptureMethod.SHIZUKU) accessState.value = it.state != ShizukuConnectionState.UNSUPPORTED && shizuku.isAuthorized() } } }
     private val busyState = MutableStateFlow(false)
     val busy = busyState.asStateFlow()
     private val messageState = MutableStateFlow<String?>(null)
     val message = messageState.asStateFlow()
-    fun refreshAccess() { refresh.update { it + 1 }; accessState.value = when (method.value) {
+    fun refreshAccess() { refresh.update { it + 1 }; shizuku.refreshStatus(); accessState.value = when (method.value) {
         CaptureMethod.ACCESSIBILITY -> runtime.hasAccessibilityAccess()
         CaptureMethod.NOTIFICATION -> runtime.hasAccess()
+        CaptureMethod.SHIZUKU -> shizuku.status.value.state != ShizukuConnectionState.UNSUPPORTED && shizuku.isAuthorized()
         else -> false
     } }
     fun hasAccessibilityAccess() = runtime.hasAccessibilityAccess()
+    fun hasNotificationAccess() = runtime.hasAccess()
+    fun requestShizuku() { shizuku.requestPermission(); shizuku.connect() }
+    fun bookingMode(mode: CaptureBookingMode) = action { repository.setBookingMode(mode) }
+    fun dailySummary(enabled: Boolean) = action {
+        repository.setDailySummaryEnabled(enabled)
+        if (enabled && !ensureBackground()) messageState.value = "后台服务未能启动，请回到应用后重试。"
+    }
+    fun openConfirmation(id: String) = showConfirmation(id)
     fun selectMethod(method: CaptureMethod, onSelected: () -> Unit = {}) = action { runtime.selectMethod(method); refreshAccess(); onSelected() }
     fun reconnect() { refreshAccess(); runtime.requestReconnect() }
     fun afterRestore() { runtime.afterRestore(); clearMessage(); refreshAccess() }
     fun clearMessage() { messageState.value = null; runtime.clearError() }
     fun enable(enabled: Boolean) = action {
         refreshAccess()
-        require(!enabled || method.value in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.NOTIFICATION)) { "该采集方式尚未接入。" }
+        require(!enabled || method.value in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.NOTIFICATION, CaptureMethod.SHIZUKU)) { "该采集方式尚未接入。" }
         require(!enabled || accessState.value) { "请先在系统设置中授权${method.value.label}访问。" }
         repository.setEnabled(enabled)
+        if (enabled && !ensureBackground()) { repository.setEnabled(false); throw IllegalArgumentException("后台服务未能启动，请保持应用前台后重试。") }
     }
     fun source(source: String, enabled: Boolean) = action { repository.setSource(source, enabled) }
     fun ignore(id: String, onDone: () -> Unit = {}) = action { repository.ignore(id); messageState.value = "事件已忽略。"; onDone() }
@@ -80,10 +95,11 @@ class CaptureViewModel(private val repository: CaptureRepository, private val ru
             } finally { busyState.value = false }
         }
     }
-    class Factory(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository) : ViewModelProvider.Factory {
+    class Factory(private val repository: CaptureRepository, private val runtime: NotificationCaptureRuntime, private val ledger: LedgerRepository,
+        private val shizuku: ShizukuCaptureController, private val ensureBackground: () -> Boolean, private val showConfirmation: (String) -> Unit) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             require(modelClass.isAssignableFrom(CaptureViewModel::class.java))
-            @Suppress("UNCHECKED_CAST") return CaptureViewModel(repository, runtime, ledger) as T
+            @Suppress("UNCHECKED_CAST") return CaptureViewModel(repository, runtime, ledger, shizuku, ensureBackground, showConfirmation) as T
         }
     }
 }

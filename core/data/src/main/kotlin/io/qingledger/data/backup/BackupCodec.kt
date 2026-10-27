@@ -27,7 +27,7 @@ internal object BackupCodec {
             }))
         }
         val json = payload.put("tables", tables).toString()
-        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 5)
+        return JSONObject().put("format", "qingledger-backup").put("version", 1).put("databaseVersion", 6)
             .put("createdAt", snapshot.createdAt).put("sha256", digest(json)).put("payload", json).toString().toByteArray(Charsets.UTF_8)
             .also { require(it.size <= BackupRepository.MAX_BYTES) { "备份超过 16MB，当前版本暂不支持。" } }
     }
@@ -38,7 +38,8 @@ internal object BackupCodec {
             val envelope = parse(String(bytes, Charsets.UTF_8))
             val legacy = exactInteger(envelope.get("databaseVersion"), 3)
             val withoutDiscount = legacy || exactInteger(envelope.get("databaseVersion"), 4)
-            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && (withoutDiscount || exactInteger(envelope.get("databaseVersion"), 5))) { "备份格式或数据库版本不支持。" }
+            val withoutConfirmation = withoutDiscount || exactInteger(envelope.get("databaseVersion"), 5)
+            require(envelope.optString("format") == "qingledger-backup" && exactInteger(envelope.get("version"), 1) && (withoutConfirmation || exactInteger(envelope.get("databaseVersion"), 6))) { "备份格式或数据库版本不支持。" }
             val payload = envelope.get("payload") as? String ?: error("Invalid payload")
             require(envelope.getString("sha256") == digest(payload)) { "备份校验失败，文件可能已损坏。" }
             val root = parse(payload)
@@ -50,9 +51,14 @@ internal object BackupCodec {
                 val table = input.getJSONObject(name)
                 val columns = expected.getValue(name)
                 val names = table.getJSONArray("columns")
-                val inputColumns = if (name == "transactions") columns.filterNot {
-                    (legacy && it.name == "originalExpenseId") || (withoutDiscount && it.name in setOf("originalAmountMinor", "discountMinor"))
-                } else columns
+                val inputColumns = columns.filterNot {
+                    when (name) {
+                        "transactions" -> (legacy && it.name == "originalExpenseId") || (withoutDiscount && it.name in setOf("originalAmountMinor", "discountMinor"))
+                        "capture_configuration" -> withoutConfirmation && it.name in setOf("bookingMode", "dailySummaryEnabled")
+                        "notification_candidates" -> withoutConfirmation && it.name in setOf("merchant", "accountName", "originalAmountMinor", "discountMinor")
+                        else -> false
+                    }
+                }
                 require((0 until names.length()).map { names.getString(it) } == inputColumns.map { it.name }) { "备份字段不匹配。" }
                 val rows = table.getJSONArray("rows")
                 count += rows.length()
@@ -68,7 +74,14 @@ internal object BackupCodec {
                             else -> { require(value is String && value.length <= 65536) { "备份文字格式无效。" }; value }
                         }
                     }
-                    columns.map { column -> inputColumns.indexOf(column).takeIf { it >= 0 }?.let { values[it] } }
+                    columns.map { column ->
+                        val position = inputColumns.indexOf(column)
+                        if (position >= 0) values[position] else when {
+                            name == "capture_configuration" && column.name == "bookingMode" -> "DIRECT"
+                            name == "capture_configuration" && column.name == "dailySummaryEnabled" -> 1L
+                            else -> null
+                        }
+                    }
                 })
             }
             val createdAt = envelope.get("createdAt")

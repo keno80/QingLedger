@@ -22,7 +22,7 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 fun LazyListScope.captureRecords(rows: List<PendingCandidate>, capture: CaptureViewModel, zoneId: String, filter: Int, onFilter: (Int) -> Unit, onOpen: (PendingCandidate) -> Unit) {
-    item("record-tabs") { LedgerSegmentedControl(listOf("全部", "已入账", "已跳过"), filter, onFilter) }
+    item("record-tabs") { LedgerSegmentedControl(listOf("全部", "已入账", "已跳过", "待确认"), filter, onFilter) }
     item("capture-diagnostics") { CaptureDiagnosticsCard(capture, zoneId) }
     val zone = ZoneId.of(zoneId)
     val grouped = rows.filter { CaptureDisplayRules.matches(it.state, filter) }.sortedWith(compareByDescending<PendingCandidate> { it.receivedAt }.thenBy { it.id })
@@ -93,7 +93,7 @@ fun CaptureRecordSheet(row: PendingCandidate?, zoneId: String, onClose: () -> Un
             Text(when (row.state) { "AUTO_POSTED" -> "已直接入账，可在账单中编辑或删除。"; "CONFIRMED" -> "已人工入账。"; "MERGED" -> "已关联原账单，未重复入账。"; "IGNORED" -> "已忽略，未生成新账单。"; else -> reviewLabel(row.reason) }, fontSize = 13.sp)
             val transaction = row.transactionId ?: if (row.state == "MERGED") row.relatedTransactionId else null
             if (transaction != null) Button(onClick = { onClose(); onTransaction(transaction) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("查看账单") }
-            if (row.state == "PENDING") Button(onClick = { onClose(); onLegacy(row.id) }, modifier = Modifier.fillMaxWidth()) { Text("查看旧版事件") }
+            if (row.state == "PENDING") Button(onClick = { onClose(); onLegacy(row.id) }, modifier = Modifier.fillMaxWidth()) { Text("确认记账") }
         }
     }
 }

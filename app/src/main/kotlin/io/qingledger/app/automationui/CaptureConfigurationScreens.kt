@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.qingledger.app.settings.*
 import io.qingledger.designsystem.component.*
 import io.qingledger.domain.model.CaptureMethod
+import io.qingledger.domain.model.CaptureBookingMode
 import top.yukonga.miuix.kmp.basic.*
 
 @Composable
@@ -38,15 +39,31 @@ fun CapturePermissionsScreen(capture: CaptureViewModel) {
     var notices by remember { mutableStateOf(capture.notificationsEnabled()) }
     var promotion by remember { mutableStateOf(capture.promotionAllowed()) }
     var batteryExempt by remember { mutableStateOf(false) }
+    var overlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    val config by capture.settings.collectAsStateWithLifecycle()
+    val method by capture.method.collectAsStateWithLifecycle()
     ObserveCaptureAccess(capture) {
         notices = capture.notificationsEnabled(); promotion = capture.promotionAllowed()
         batteryExempt = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+        overlays = Settings.canDrawOverlays(context)
     }
     val requestNotices = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notices = capture.notificationsEnabled(); promotion = capture.promotionAllowed() }
     fun open(intent: Intent) { if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent) }
     fun appDetails() = open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SettingsSection("运行保障") {
+            if (config.bookingMode == CaptureBookingMode.CONFIRM) {
+                SettingsNavigationRow("确认弹窗", if (overlays) "可在其他应用上方确认记账" else "未授权时点击通知确认", LedgerIcons.Ledger, {
+                    open(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                }) { CaptureBadge(if (overlays) "已授权" else "去配置", overlays) }
+                SettingsRowDivider()
+            }
+            if (method == CaptureMethod.SHIZUKU) {
+                SettingsNavigationRow("支付宝通知访问", if (capture.hasNotificationAccess()) "已授权" else "接收交易与退款通知", LedgerIcons.Wallet, {
+                    open(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }) { CaptureBadge(if (capture.hasNotificationAccess()) "已授权" else "去配置", capture.hasNotificationAccess()) }
+                SettingsRowDivider()
+            }
             SettingsNavigationRow("后台运行", "根据系统设置允许后台活动", LedgerIcons.Automation, ::appDetails) { CaptureBadge("去配置") }
             SettingsRowDivider()
             SettingsNavigationRow("电池优化", if (batteryExempt) "已忽略电池优化" else "系统限制可能造成漏记", LedgerIcons.Privacy, { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }) { CaptureBadge(if (batteryExempt) "已配置" else "去配置", batteryExempt) }

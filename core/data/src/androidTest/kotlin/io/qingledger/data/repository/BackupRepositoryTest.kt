@@ -11,10 +11,81 @@ import java.security.MessageDigest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.*
 import org.junit.Assert.*
 
 class BackupRepositoryTest {
+    @Test fun versionSixRoundTripKeepsConfirmationOptionsStructuredPendingAndRefundHistory() = runBlocking {
+        db.captureDao().setBookingMode("CONFIRM")
+        db.captureDao().setDailySummaryEnabled(false)
+        val refund = ledger.save(TransactionDraft(TransactionKind.REFUND, 500, 100))
+        db.captureDao().insert(NotificationCandidateEntity("refund", "com.tencent.mm", "p", "refund-session", "refund-digest", 1, 100, 500, "REFUND", "UNVERIFIED_TEMPLATE", "CONFIRMED", refund))
+        db.captureDao().insert(NotificationCandidateEntity("pending", "com.tencent.mm", "p", "pending-session", "pending-digest", 1, 200, 900, "EXPENSE", "UNVERIFIED_TEMPLATE", merchant = "餐厅", accountName = "新银行储蓄卡（1234）", originalAmountMinor = 1000, discountMinor = 100))
+        val bytes = backup.create()
+        assertEquals(6, JSONObject(String(bytes)).getInt("databaseVersion"))
+        assertEquals(1, backup.inspect(bytes).transactionCount)
+        backup.restore(bytes)
+        val config = db.captureDao().configuration()!!
+        assertEquals("CONFIRM", config.bookingMode)
+        assertFalse(config.dailySummaryEnabled)
+        assertFalse(config.enabled)
+        val pending = db.captureDao().get("pending")!!
+        assertEquals("PENDING", pending.state)
+        assertEquals("餐厅", pending.merchant)
+        assertEquals("新银行储蓄卡（1234）", pending.accountName)
+        assertEquals(1000L, pending.originalAmountMinor)
+        assertEquals(100L, pending.discountMinor)
+        assertEquals(1, db.ledgerDao().allTransactionsForBackup().size)
+        assertEquals(4, ledger.accounts.first().size)
+        assertEquals("REFUND", db.captureDao().get("refund")!!.kind)
+    }
+    @Test fun versionsThreeFourAndFiveRestoreWithDirectBookingAndSummaryEnabledDefaults() = runBlocking {
+        keptTransaction()
+        db.captureDao().setBookingMode("CONFIRM")
+        db.captureDao().setDailySummaryEnabled(false)
+        val bytes = backup.create()
+        listOf(3, 4, 5).forEach { version ->
+            val legacy = legacyVersion(bytes, version)
+            assertEquals(1, backup.inspect(legacy).transactionCount)
+            backup.restore(legacy)
+            val config = db.captureDao().configuration()!!
+            assertEquals("DIRECT", config.bookingMode)
+            assertTrue(config.dailySummaryEnabled)
+            assertFalse(config.enabled)
+            assertEquals(1, db.ledgerDao().allTransactionsForBackup().size)
+        }
+    }
+    @Test fun invalidConfirmationOptionsAreRejectedBeforeReplacement() = runBlocking {
+        val bytes = backup.create()
+        listOf("bookingMode" to "UNKNOWN", "dailySummaryEnabled" to 2).forEach { (field, value) ->
+            rejected(mutate(bytes) { root ->
+                val table = root.getJSONObject("tables").getJSONObject("capture_configuration")
+                val columns = table.getJSONArray("columns")
+                val position = (0 until columns.length()).first { columns.getString(it) == field }
+                table.getJSONArray("rows").getJSONArray(0).put(position, value)
+            })
+        }
+    }
+    private fun legacyVersion(bytes: ByteArray, version: Int): ByteArray {
+        val changed = mutate(bytes) { root ->
+            val tables = root.getJSONObject("tables")
+            val removed = mapOf(
+                "capture_configuration" to setOf("bookingMode", "dailySummaryEnabled"),
+                "notification_candidates" to setOf("merchant", "accountName", "originalAmountMinor", "discountMinor"),
+                "transactions" to (if (version == 3) setOf("originalExpenseId", "originalAmountMinor", "discountMinor") else if (version == 4) setOf("originalAmountMinor", "discountMinor") else emptySet()),
+            )
+            removed.forEach { (name, fields) ->
+                val table = tables.getJSONObject(name)
+                val columns = table.getJSONArray("columns")
+                val positions = (0 until columns.length()).filter { columns.getString(it) !in fields }
+                val rows = table.getJSONArray("rows")
+                table.put("columns", JSONArray(positions.map { columns.getString(it) }))
+                table.put("rows", JSONArray((0 until rows.length()).map { index -> JSONArray(positions.map { rows.getJSONArray(index).get(it) }) }))
+            }
+        }
+        return JSONObject(String(changed)).put("databaseVersion", version).toString().toByteArray()
+    }
     private lateinit var db: LedgerDatabase
     private lateinit var ledger: RoomLedgerRepository
     private lateinit var backup: RoomBackupRepository

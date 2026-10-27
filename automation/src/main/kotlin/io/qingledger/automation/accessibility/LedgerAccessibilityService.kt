@@ -40,7 +40,12 @@ class LedgerAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val source = event?.packageName?.toString() ?: return
         runtime.accessibilityEventReceived(source, event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED)
-        if (!runtime.acceptsAccessibility(source)) { activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); runCatching { clearOcrContext() }.onFailure { runtime.reportAccessibilityError() }; pending?.cancel(); return }
+        if (!runtime.acceptsAccessibility(source)) {
+            activePage = null; pageWindow = -1; pageClass = null; paymentCache.clear(); pending?.cancel()
+            if (runtime.method.value == CaptureMethod.ACCESSIBILITY) runCatching { clearOcrContext() }.onFailure { runtime.reportAccessibilityError() }
+            else { ocrPaymentCache.clear(); contextExpiry?.cancel(); stateLoaded = false; historyLoaded = false }
+            return
+        }
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             val notice = event.parcelableData as? Notification
             if (notice != null) runtime.accessibilityNotificationPosted(source, notice, event.eventTime)

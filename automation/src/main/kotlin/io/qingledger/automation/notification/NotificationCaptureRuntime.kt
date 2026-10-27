@@ -65,6 +65,7 @@ class NotificationCaptureRuntime(
     val error = mutableError.asStateFlow()
     private val mutableLastEvent = MutableStateFlow<Long?>(null)
     val lastEvent = mutableLastEvent.asStateFlow()
+    var confirmationHandler: ((String) -> Unit)? = null
     private val liveNotification = CaptureLiveNotification(app)
     private val noticeGate = CaptureNoticeGate()
     fun notificationsEnabled() = liveNotification.notificationsEnabled()
@@ -89,7 +90,7 @@ class NotificationCaptureRuntime(
                     if (!isCurrent(event, origin)) { diagnostic(event.sourcePackage, "SAVE", "SETTINGS_CHANGED"); continue }
                     val parsed = (when {
                         event.sourcePackage == ALIPAY && (origin == CaptureMethod.NOTIFICATION || event.sessionKey.startsWith("notice:")) -> AlipayNoticeRules.propose(text)
-                        origin == CaptureMethod.ACCESSIBILITY -> AccessibilityRules.propose(text)
+                        origin in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU) -> AccessibilityRules.propose(text)
                         else -> NotificationRules.propose(text)
                     }) ?: continue
                     if (repository.capturedState(event) != null) { diagnostic(event.sourcePackage, "SAVE", "DUPLICATE"); continue }
@@ -107,6 +108,7 @@ class NotificationCaptureRuntime(
                         mutableLastEvent.value = event.receivedAt
                         val savedState = repository.capturedState(event)
                         diagnostic(event.sourcePackage, "SAVE", savedState ?: "EVENT_REJECTED")
+                        if (savedState == "PENDING") repository.capturedCandidateId(event)?.let { confirmationHandler?.invoke(it) }
                         if (isCurrent(event, origin)) liveNotification.finished(savedState) else liveNotification.cancel()
                     } else { diagnostic(event.sourcePackage, "SAVE", "EVENT_REJECTED"); liveNotification.cancel() }
                     announced = false
@@ -150,14 +152,20 @@ class NotificationCaptureRuntime(
         settings.value.enabled && source in accessibilitySources && source in settings.value.sources
     internal suspend fun accessibilityReceipts() = repository.accessibilityReceipts(Process.myUserHandle().toString())
     fun accessibilityPosted(source: String, session: String, text: String, generation: Long, accountName: String? = null, merchantName: String? = null, originalAmountMinor: Long? = null, discountMinor: Long? = null) {
-        if (!acceptsAccessibility(source)) return
+        pagePosted(CaptureMethod.ACCESSIBILITY, source, session, text, generation, accountName, merchantName, originalAmountMinor, discountMinor)
+    }
+    fun shizukuPosted(source: String, session: String, text: String, generation: Long, accountName: String? = null, merchantName: String? = null, originalAmountMinor: Long? = null, discountMinor: Long? = null) {
+        pagePosted(CaptureMethod.SHIZUKU, source, session, text, generation, accountName, merchantName, originalAmountMinor, discountMinor)
+    }
+    private fun pagePosted(origin: CaptureMethod, source: String, session: String, text: String, generation: Long, accountName: String?, merchantName: String?, originalAmountMinor: Long?, discountMinor: Long?) {
+        if (origin != method.value || !settings.value.enabled || source !in accessibilitySources || source !in settings.value.sources) return
         // Alipay's page and notification do not share an order ID. Only its settled
         // notification writes a bill; never merge separate payments by amount/time.
         if (source == ALIPAY) { diagnostic(source, "RULE", "ALIPAY_NOTICE_REQUIRED"); return }
         val merchant = merchantName?.trim()?.take(128)?.takeIf { it.isNotBlank() }
         val sessionKey = if (Regex("^a11y:[a-f0-9]{64}$").matches(session)) session else "a11y:" + hash(session)
         val event = CapturedNotification(source, Process.myUserHandle().toString(), sessionKey, hash(text + "|account:" + accountName.orEmpty() + "|merchant:" + merchant.orEmpty() + "|prices:$originalAmountMinor:$discountMinor"), System.currentTimeMillis(), null, generation)
-        if (queue.trySend(Queued(event, text.take(8192), CaptureMethod.ACCESSIBILITY, accountName, merchant, originalAmountMinor, discountMinor)).isFailure) {
+        if (queue.trySend(Queued(event, text.take(8192), origin, accountName, merchant, originalAmountMinor, discountMinor)).isFailure) {
             diagnostic(source, "SAVE", "QUEUE_FULL"); mutableError.value = "事件队列已满，可能存在未采集记录。"
         } else diagnostic(source, "RULE", "QUEUED")
     }
@@ -213,9 +221,9 @@ class NotificationCaptureRuntime(
     fun removed(sbn: StatusBarNotification) { sessions.remove(sbn.key) }
     fun posted(sbn: StatusBarNotification) {
         val current = settings.value
-        if (method.value == CaptureMethod.ACCESSIBILITY && sbn.packageName == ALIPAY && acceptsAccessibility(sbn.packageName) && sbn.user == Process.myUserHandle()) {
+        if (method.value in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU) && current.enabled && sbn.packageName == ALIPAY && sbn.packageName in current.sources && sbn.user == Process.myUserHandle()) {
             diagnostic(sbn.packageName, "EVENT", "NOTIFICATION_EVENT")
-            settledNotice(sbn.packageName, sbn.notification, "listener:${sbn.key}|${sbn.postTime}", CaptureMethod.ACCESSIBILITY)
+            settledNotice(sbn.packageName, sbn.notification, "listener:${sbn.key}|${sbn.postTime}", method.value)
             return
         }
         if (method.value != CaptureMethod.NOTIFICATION || !current.enabled || sbn.packageName !in current.sources || sbn.user != Process.myUserHandle()) return

@@ -28,7 +28,7 @@ class CaptureLiveNotification(private val context: Context, private val notifica
 
     internal fun progressNotification(diagnostic: Boolean = false): Notification {
         val builder = if (diagnostic) base("实时更新展示自检", "Debug 测试通知，8秒后结束，不生成账单。")
-            else base("正在识别交易", "正在识别并保存账单，请稍候。")
+            else base("正在识别交易", "正在核对交易信息，请稍候。")
         builder
             .setOngoing(true)
             .setProgress(0, 0, true)
@@ -69,6 +69,7 @@ class CaptureLiveNotification(private val context: Context, private val notifica
             .setShortCriticalText(when (state) {
                 "AUTO_POSTED", "CONFIRMED" -> "已入账"
                 "MERGED" -> "已关联"
+                "PENDING" -> "待确认"
                 "SKIPPED", "IGNORED" -> "已跳过"
                 else -> "未完成"
             })

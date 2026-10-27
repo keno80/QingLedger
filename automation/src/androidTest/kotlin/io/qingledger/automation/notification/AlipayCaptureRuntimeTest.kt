@@ -13,6 +13,35 @@ import org.junit.*
 import org.junit.Assert.*
 
 class AlipayCaptureRuntimeTest {
+    @Test fun shizukuUsesSharedReceiptQueueAndRejectsInactiveAccessibilityTransport() = runBlocking {
+        runtime.close()
+        context.getSharedPreferences("capture_method", Context.MODE_PRIVATE).edit().putString("method", "SHIZUKU").commit()
+        repository = MemoryCapture("com.tencent.mm")
+        runtime = NotificationCaptureRuntime(context, repository)
+        withTimeout(5000) { runtime.settings.first { it.enabled } }
+        runtime.accessibilityPosted("com.tencent.mm", "inactive", "支付成功\n¥28.00", 4)
+        runtime.shizukuPosted("com.tencent.mm", "a11y:" + "e".repeat(64), "支付成功\n¥28.00", 4, "微信零钱", "测试对方")
+        val rows = withTimeout(5000) { repository.received.first { it.isNotEmpty() } }
+        assertEquals(1, rows.size)
+        assertEquals("测试对方", rows.single().second.merchantName)
+        assertEquals("微信零钱", rows.single().second.accountName)
+    }
+    @Test fun pendingCaptureOpensExactCandidateWithoutReportingBookedOrReopeningReplay() = runBlocking {
+        runtime.close()
+        repository = MemoryCapture("com.tencent.mm")
+        repository.settings.value = repository.settings.value.copy(bookingMode = CaptureBookingMode.CONFIRM)
+        runtime = NotificationCaptureRuntime(context, repository)
+        val opened = MutableStateFlow<List<String>>(emptyList())
+        runtime.confirmationHandler = { opened.value += it }
+        withTimeout(5000) { runtime.settings.first { it.bookingMode == CaptureBookingMode.CONFIRM } }
+        runtime.accessibilityPosted("com.tencent.mm", "pending-session", "支付成功\n¥28.00", 4)
+        assertEquals(listOf("candidate-test-id"), withTimeout(5000) { opened.first { it.isNotEmpty() } })
+        assertTrue(runtime.diagnostics.value.any { it.reason == "PENDING" })
+        assertFalse(runtime.diagnostics.value.any { it.reason == "AUTO_POSTED" })
+        runtime.accessibilityPosted("com.tencent.mm", "pending-session", "支付成功\n¥28.00", 4)
+        withTimeout(5000) { runtime.diagnostics.first { it.any { d -> d.reason == "DUPLICATE" } } }
+        assertEquals(1, opened.value.size)
+    }
     @Test fun restoredReceiptSessionIsNotRehashedWhenItsAccountIsMissing() = runBlocking {
         runtime.close()
         repository = MemoryCapture("com.tencent.mm")
@@ -148,7 +177,8 @@ class AlipayCaptureRuntimeTest {
         override val pendingCount = MutableStateFlow(0)
         val received = MutableStateFlow<List<Pair<CapturedNotification, NotificationProposal>>>(emptyList())
         override fun overview(period: PeriodRange) = flowOf(CaptureOverview())
-        override suspend fun capturedState(event: CapturedNotification) = if (received.value.any { it.first.sessionKey == event.sessionKey && it.first.digest == event.digest }) "AUTO_POSTED" else null
+        override suspend fun capturedState(event: CapturedNotification) = if (received.value.any { it.first.sessionKey == event.sessionKey && it.first.digest == event.digest }) (if (settings.value.bookingMode == CaptureBookingMode.CONFIRM) "PENDING" else "AUTO_POSTED") else null
+        override suspend fun capturedCandidateId(event: CapturedNotification) = if (capturedState(event) != null) "candidate-test-id" else null
         override suspend fun capture(event: CapturedNotification, proposal: NotificationProposal): Boolean { received.value += event to proposal; return true }
         override suspend fun setEnabled(enabled: Boolean) { settings.value = settings.value.copy(enabled = enabled) }
         override suspend fun setSource(source: String, enabled: Boolean) = error("unused")

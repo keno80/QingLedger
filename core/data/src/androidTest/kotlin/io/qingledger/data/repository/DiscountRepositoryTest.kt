@@ -99,6 +99,7 @@ class DiscountRepositoryTest {
                 val keep = (0 until columns.length()).filter { !oldVersion || columns.getString(it) !in setOf("originalAmountMinor", "discountMinor") }
                 val rows = table.getJSONArray("rows")
                 if (oldVersion) {
+                    removeVersionSixCaptureColumns(payload)
                     table.put("columns", JSONArray().apply { keep.forEach { put(columns.get(it)) } })
                     for (index in 0 until rows.length()) { val row = rows.getJSONArray(index); rows.put(index, JSONArray().apply { keep.forEach { put(row.get(it)) } }) }
                     envelope.put("databaseVersion", 4)

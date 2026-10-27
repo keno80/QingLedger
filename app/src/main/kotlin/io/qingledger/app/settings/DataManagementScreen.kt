@@ -52,7 +52,7 @@ fun DataManagementScreen(data: DataManagementViewModel, capture: CaptureViewMode
             SettingsNavigationRow("数据清理", "按范围选择，操作前再次确认", LedgerIcons.Database, { info = "按范围清理暂未实现，不会删除账单。" }, enabled = enabled)
         }
         Text("数据操作集中到这里，首页不展示维护与调试按钮。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        Text("备份文件包含明文财务数据，请妥善保管；支持数据库版本 3 / 4，文件最大 16MB。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        Text("备份文件包含明文财务数据，请妥善保管；支持数据库版本 3 / 4 / 5 / 6，文件最大 16MB。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         if (state.busy) StatusCard("正在处理", "请等待完成后再离开。")
         (if (showCaptureMessage) captureMessage else state.message)?.let { StatusCard("数据管理提示", it) }
     }

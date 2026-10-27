@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 
 class AppContainer(context: Context) {
+    private val app = context.applicationContext
     val settingsRepository: SettingsRepository = DataStoreSettingsRepository(context)
     private val database = LedgerDatabase.create(context)
     val ledgerRepository: LedgerRepository = RoomLedgerRepository(database)
@@ -25,6 +26,12 @@ class AppContainer(context: Context) {
     private val captureSources = accessibilitySources + if (BuildConfig.DEBUG) setOf("com.android.shell") else emptySet()
     val captureRepository: CaptureRepository = RoomCaptureRepository(database, ledgerRepository, captureSources)
     val captureRuntime = NotificationCaptureRuntime(context, captureRepository, accessibilitySources)
+    val confirmations by lazy { io.qingledger.app.captureconfirmation.ConfirmationCoordinator(app, this) }
+    private val shizukuProcessor by lazy { io.qingledger.automation.accessibility.ShizukuReceiptProcessor(app, captureRuntime) }
+    val shizuku: io.qingledger.automation.shizuku.ShizukuCaptureController by lazy {
+        io.qingledger.automation.shizuku.ShizukuCaptureController(app) { frame -> shizukuProcessor.process(frame, shizuku::isCurrent) }
+    }
+    init { captureRuntime.confirmationHandler = { confirmations.offer(it) } }
     val backupRepository = RoomBackupRepository(context, database, File(context.filesDir, "restore-recovery.qlbackup"),
         readPreferences = { BackupPreferences(settingsRepository.themeMode.first(), captureRuntime.method.value) },
         writePreferences = { captureRuntime.selectMethod(it.method); settingsRepository.setThemeMode(it.theme) })

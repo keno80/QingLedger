@@ -45,7 +45,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, statistics: io.qingledger.app.statistics.StatisticsViewModel, capture: CaptureViewModel, data: DataManagementViewModel, csvImport: CsvImportViewModel) {
+fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, ledger: LedgerViewModel, searchLedger: LedgerViewModel, statistics: io.qingledger.app.statistics.StatisticsViewModel, capture: CaptureViewModel, data: DataManagementViewModel, csvImport: CsvImportViewModel, todayRequest: Long = 0) {
     var savedRoute by rememberSaveable { mutableStateOf(AppRoute.LEDGER.name) }
     val route = AppRoute.fromSavedValue(savedRoute)
     val stateHolder = rememberSaveableStateHolder()
@@ -71,6 +71,12 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
     var editorCategoryManagement by rememberSaveable { mutableStateOf(false) }
     var captureLogFilter by rememberSaveable { mutableStateOf(0) }
     var captureLogId by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(todayRequest) {
+        if (todayRequest > 0) {
+            savedRoute = AppRoute.LEDGER.name; screen = "list"; selectedId = null
+            ledger.resetSearch(java.time.YearMonth.now(java.time.ZoneId.of(state.zoneId)))
+        }
+    }
     val selected by produceState<Pair<Boolean, LedgerTransaction?>>(true to null, selectedId, session) {
         value = true to null
         value = if (selectedId == null) false to null else try { false to ledger.get(selectedId!!) } catch (_: Exception) { false to null }
@@ -184,7 +190,7 @@ fun AppNavHost(themeMode: ThemeMode, settingsRepository: SettingsRepository, led
             }
         }
         CaptureRecordSheet(candidateRows.find { it.id == captureLogId }, captureOverview.zoneId, { captureLogId = null },
-            { openTransaction(it, "capture-logs") }, { selectedId = it; session++; screen = "candidate"; capture.clearMessage() })
+            { openTransaction(it, "capture-logs") }, capture::openConfirmation)
         }
     }
 }

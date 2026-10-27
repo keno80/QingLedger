@@ -98,7 +98,7 @@ class RoomBackupRepository(
     }
     private suspend fun validate(snapshot: BackupSnapshot) {
         snapshot.tables.values.forEach { table ->
-            table.columns.forEachIndexed { index, column -> if (column.name in setOf("enabled", "archived", "hidden")) require(table.rows.all { it[index] == 0L || it[index] == 1L }) { "备份开关状态无效。" } }
+            table.columns.forEachIndexed { index, column -> if (column.name in setOf("enabled", "archived", "hidden", "dailySummaryEnabled")) require(table.rows.all { it[index] == 0L || it[index] == 1L }) { "备份开关状态无效。" } }
         }
         val staged = Room.inMemoryDatabaseBuilder(app, LedgerDatabase::class.java).build()
         try {
@@ -127,7 +127,8 @@ class RoomBackupRepository(
                 val config = staged.captureDao().configuration()
                 val configurations = snapshot.tables.getValue("capture_configuration").rows
                 require(configurations.size <= 1 && (configurations.isEmpty() || config != null) && (config == null || config.generation in 0..Long.MAX_VALUE - 1024)) { "备份采集配置无效。" }
-                staged.openHelper.writableDatabase.query("SELECT COUNT(*) FROM notification_candidates WHERE state NOT IN ('PENDING','CONFIRMED','AUTO_POSTED','MERGED','SKIPPED','IGNORED') OR (kind IS NOT NULL AND kind NOT IN ('EXPENSE','INCOME','TRANSFER')) OR (transactionId IS NOT NULL AND transactionId NOT IN (SELECT id FROM transactions)) OR (relatedTransactionId IS NOT NULL AND relatedTransactionId NOT IN (SELECT id FROM transactions))").use { require(it.moveToFirst() && it.getLong(0) == 0L) { "备份识别记录无效。" } }
+                require(config == null || config.bookingMode in CaptureBookingMode.entries.map { it.name }) { "备份入账方式无效。" }
+                staged.openHelper.writableDatabase.query("SELECT COUNT(*) FROM notification_candidates WHERE state NOT IN ('PENDING','CONFIRMED','AUTO_POSTED','MERGED','SKIPPED','IGNORED') OR (kind IS NOT NULL AND kind NOT IN ('EXPENSE','INCOME','TRANSFER','REFUND')) OR (transactionId IS NOT NULL AND transactionId NOT IN (SELECT id FROM transactions)) OR (relatedTransactionId IS NOT NULL AND relatedTransactionId NOT IN (SELECT id FROM transactions))").use { require(it.moveToFirst() && it.getLong(0) == 0L) { "备份识别记录无效。" } }
             }
         } catch (error: IllegalArgumentException) { throw error }
         catch (_: Exception) { throw IllegalArgumentException("备份数据不完整或关联校验失败。") }

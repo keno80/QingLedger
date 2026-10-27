@@ -112,6 +112,7 @@ class RefundRepositoryTest {
             val backup = RoomBackupRepository(ApplicationProvider.getApplicationContext(), db, file, { prefs }, { prefs = it })
             val envelope = JSONObject(String(backup.create(), Charsets.UTF_8))
             val payload = JSONObject(envelope.getString("payload"))
+            removeVersionSixCaptureColumns(payload)
             val table = payload.getJSONObject("tables").getJSONObject("transactions")
             val columns = table.getJSONArray("columns")
             val removed = (0 until columns.length()).filter { columns.getString(it) in setOf("originalExpenseId", "originalAmountMinor", "discountMinor") }

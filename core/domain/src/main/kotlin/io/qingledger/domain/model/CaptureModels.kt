@@ -1,6 +1,10 @@
 package io.qingledger.domain.model
 
-data class CaptureSettings(val enabled: Boolean = false, val generation: Long = 0, val sources: Set<String> = emptySet())
+enum class CaptureBookingMode { DIRECT, CONFIRM }
+data class CaptureSettings(
+    val enabled: Boolean = false, val generation: Long = 0, val sources: Set<String> = emptySet(),
+    val bookingMode: CaptureBookingMode = CaptureBookingMode.DIRECT, val dailySummaryEnabled: Boolean = true,
+)
 data class StoredAccessibilityReceipt(val source: String, val kind: TransactionKind, val amountMinor: Long, val merchant: String?, val session: String)
 data class CapturedNotification(
     val sourcePackage: String, val profileKey: String, val sessionKey: String,
@@ -12,6 +16,7 @@ data class PendingCandidate(
     val amountMinor: Long?, val kind: TransactionKind?, val reason: String,
     val state: String, val transactionId: String?, val relatedTransactionId: String?,
     val merchant: String? = null, val accountName: String? = null,
+    val originalAmountMinor: Long? = null, val discountMinor: Long? = null,
 )
 
 object NotificationRules {

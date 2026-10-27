@@ -2,6 +2,10 @@ package io.qingledger.app.automationui
 
 import android.content.Intent
 import android.provider.Settings
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -36,8 +40,13 @@ fun AutomationScreen(capture: CaptureViewModel, onPermissions: () -> Unit, onSou
     val message by capture.message.collectAsStateWithLifecycle()
     val runtimeError by capture.runtimeError.collectAsStateWithLifecycle()
     var methods by rememberSaveable { mutableStateOf(false) }
+    var booking by rememberSaveable { mutableStateOf(false) }
+    var summary by rememberSaveable { mutableStateOf(false) }
+    var notices by remember { mutableStateOf(capture.notificationsEnabled()) }
+    ObserveCaptureAccess(capture) { notices = capture.notificationsEnabled() }
+    val requestNotices = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { notices = capture.notificationsEnabled(); if (notices) capture.dailySummary(true) }
     val status = CaptureDisplayRules.status(method, settings.enabled, access, connected, settings.sources.size)
-    val supported = method == CaptureMethod.ACCESSIBILITY || method == CaptureMethod.NOTIFICATION
+    val supported = method in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.NOTIFICATION, CaptureMethod.SHIZUKU)
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(Modifier.fillMaxWidth(), cornerRadius = 22.dp, insideMargin = PaddingValues(18.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -68,9 +77,19 @@ fun AutomationScreen(capture: CaptureViewModel, onPermissions: () -> Unit, onSou
         SettingsSection {
             SettingsNavigationRow("采集方式", method.label, LedgerIcons.Scan, { methods = true })
             SettingsRowDivider()
+            SettingsNavigationRow("入账方式", if (settings.bookingMode == CaptureBookingMode.DIRECT) "直接入账" else "确认后入账", LedgerIcons.Ledger, { booking = true })
+            SettingsRowDivider()
             SettingsNavigationRow("权限与运行", "后台、电池与通知设置", LedgerIcons.Privacy, onPermissions)
             SettingsRowDivider()
             SettingsNavigationRow("采集来源", if (settings.sources.isEmpty()) "尚未开启来源" else settings.sources.joinToString("、") { sourceLabel(it) }, LedgerIcons.Wallet, onSources)
+        }
+        SettingsSection {
+            SettingsNavigationRow("今日收支通知", if (!notices) "通知未授权" else if (settings.dailySummaryEnabled) "展示当日收入与支出" else "已关闭", LedgerIcons.Ledger, { summary = true }) {
+                Switch(settings.dailySummaryEnabled, { enabled ->
+                    if (enabled && !notices && Build.VERSION.SDK_INT >= 33) requestNotices.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    else capture.dailySummary(enabled)
+                }, enabled = !busy)
+            }
         }
         SettingsSection("记录") {
             SettingsNavigationRow("采集记录", "查看入账、跳过和关联记录", LedgerIcons.Archive, onLogs)
@@ -80,6 +99,26 @@ fun AutomationScreen(capture: CaptureViewModel, onPermissions: () -> Unit, onSou
         }
     }
     CaptureMethodSheet(methods, method, busy, capture) { methods = false }
+    LedgerBottomSheet(booking, "入账方式", { booking = false }) {
+        SettingsSection {
+            CaptureBookingMode.entries.forEachIndexed { index, value ->
+                if (index > 0) SettingsRowDivider()
+                SettingsNavigationRow(if (value == CaptureBookingMode.DIRECT) "直接入账" else "确认后入账",
+                    if (value == CaptureBookingMode.DIRECT) "识别成功后自动入账" else "先编辑确认，再保存到账本", LedgerIcons.Ledger,
+                    { capture.bookingMode(value); booking = false }, !busy) { CaptureBadge(if (settings.bookingMode == value) "已选择" else "选择", settings.bookingMode == value) }
+            }
+        }
+    }
+    LedgerBottomSheet(summary, "今日收支通知", { summary = false }) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(if (notices) "展示今日收入、支出及待确认数量，与账本同步。" else "需要允许轻账发送通知。", fontSize = 13.sp)
+            Text("锁屏隐藏具体金额，识别进度与结果继续单独展示。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Button(onClick = {
+                if (!notices && Build.VERSION.SDK_INT >= 33) requestNotices.launch(Manifest.permission.POST_NOTIFICATIONS)
+                else capture.dailySummary(!settings.dailySummaryEnabled)
+            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text(if (!notices) "开启系统通知" else if (settings.dailySummaryEnabled) "关闭今日收支通知" else "开启今日收支通知") }
+        }
+    }
 }
 
 @Composable
@@ -91,24 +130,33 @@ internal fun CaptureBadge(label: String, good: Boolean = false) {
 internal fun CaptureMethodSheet(show: Boolean, current: CaptureMethod, busy: Boolean, capture: CaptureViewModel, onClose: () -> Unit) {
     val context = LocalContext.current
     var unavailable by remember { mutableStateOf<CaptureMethod?>(null) }
+    val shizuku by capture.shizukuStatus.collectAsStateWithLifecycle()
+    ObserveCaptureAccess(capture)
     LaunchedEffect(show) { if (!show) unavailable = null }
     LedgerBottomSheet(show, "采集方式", onClose) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsSection {
                 listOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU, CaptureMethod.ROOT).forEachIndexed { index, method ->
                     if (index > 0) SettingsRowDivider()
-                    SettingsNavigationRow(method.label, when (method) { CaptureMethod.ACCESSIBILITY -> "读取所选来源的页面与交易通知"; CaptureMethod.SHIZUKU -> "尚未接入 · 后续独立配置"; else -> "尚未接入 · 后续独立授权" }, if (method == CaptureMethod.ROOT) LedgerIcons.Privacy else LedgerIcons.Scan, {
+                    SettingsNavigationRow(method.label, when (method) { CaptureMethod.ACCESSIBILITY -> "读取所选来源的页面与交易通知"; CaptureMethod.SHIZUKU -> shizuku.label; else -> "尚未接入 · 后续独立授权" }, if (method == CaptureMethod.ROOT) LedgerIcons.Privacy else LedgerIcons.Scan, {
                         if (method == CaptureMethod.ACCESSIBILITY) {
                             val afterSelection = {
                                 onClose()
                                 if (!capture.hasAccessibilityAccess()) context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                             }
                             if (current != method) capture.selectMethod(method, afterSelection) else afterSelection()
+                        } else if (method == CaptureMethod.SHIZUKU) {
+                            if (current != method) capture.selectMethod(method)
+                            unavailable = method
                         } else unavailable = method
-                    }, !busy) { CaptureBadge(if (method == current) "已选择" else if (method == CaptureMethod.ACCESSIBILITY) "可选择" else "开发中", method == current) }
+                    }, !busy) { CaptureBadge(if (method == current) "已选择" else if (method in setOf(CaptureMethod.ACCESSIBILITY, CaptureMethod.SHIZUKU)) "可选择" else "开发中", method == current) }
                 }
             }
-            unavailable?.let { Text(if (it == CaptureMethod.SHIZUKU) "Shizuku + ADB 后端尚未接入。ADB 权限不等于 Root。" else "Root 后端尚未接入，当前不会执行 su 命令。", fontSize = 13.sp) }
+            if (unavailable == CaptureMethod.SHIZUKU) {
+                Text("Shizuku · ${shizuku.label}", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(shizuku.detail ?: "安装并启动 Shizuku 后授权轻账，无需开启无障碍服务。", fontSize = 12.sp)
+                Button(onClick = capture::requestShizuku, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColorsPrimary()) { Text("连接并授权") }
+            } else unavailable?.let { Text("Root 后端尚未接入，当前不会执行 su 命令。", fontSize = 13.sp) }
             Text("切换方式会暂停采集，确认授权和来源后再开启。", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
     }

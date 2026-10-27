@@ -11,7 +11,7 @@ import io.qingledger.automation.notification.CaptureLiveNotification
 class LiveUpdateProbeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
-        val notices = CaptureLiveNotification(context.applicationContext, notificationId = 4102)
+        val notices = CaptureLiveNotification(context.applicationContext, notificationId = 4199)
         notices.started(diagnostic = true)
         Handler(Looper.getMainLooper()).postDelayed({
             notices.cancel()

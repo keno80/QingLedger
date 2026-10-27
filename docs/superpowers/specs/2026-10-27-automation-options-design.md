@@ -1,6 +1,6 @@
-# 自动记账新增选项设计（待确认）
+# 自动记账新增选项设计（已确认）
 
-日期：2026-10-27。基于 0.7.34 / d04bae6。本文是方案，不表示 Android 功能已经实现。
+日期：2026-10-27。基于 0.7.34 / d04bae6，用户已确认全部方案及后续布局修订。实现版本为 0.8.0；实际验证范围以交付验收记录为准。
 
 ## 需求与兼容约束
 
@@ -28,7 +28,7 @@
 
 所有新增内容使用现有薄荷绿、miuix 卡片 / 分段 / 底部面板及等宽操作按钮，保留安全区与 24dp 末尾留白。不调整无关账本、统计或我的页面。
 
-交互预览：[新增功能提案](../../qingledger-automation-options-preview.html)。实现获批后将相同入口和交互同步到 `docs/qingledger-ui-preview.html`。
+交互预览：[新增功能提案](../../qingledger-automation-options-preview.html)。已批准的入口和交互同步到 `docs/qingledger-ui-preview.html`。
 
 ## 今日收支常驻通知
 

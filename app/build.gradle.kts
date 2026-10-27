@@ -4,16 +4,19 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
 }
 
+val qaBuild = providers.gradleProperty("qingledger.qa").orNull == "true"
+
 android {
     namespace = "io.qingledger.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.qingledger.app"
+        applicationId = if (qaBuild) "io.qingledger.app.qa" else "io.qingledger.app"
+        manifestPlaceholders["appLabel"] = if (qaBuild) "轻账验证" else "轻账"
         minSdk = 30
         targetSdk = 37
-        versionCode = 46
-        versionName = "0.7.34"
+        versionCode = 47
+        versionName = "0.8.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

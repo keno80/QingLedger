@@ -7,10 +7,249 @@ import io.qingledger.domain.model.*
 import java.time.*
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
 import org.junit.*
 import org.junit.Assert.*
 
 class RoomCaptureRepositoryTest {
+    @Test fun pendingAndIgnoredReceiptsSurviveSixtyFivePostedAccountHistoryRows() = runBlocking {
+        enable()
+        repeat(65) { index ->
+            capture.capture(event("a11y:posted-$index").copy(receivedAt = now - (index + 1) * 180000L),
+                proposal.copy(amountMinor = 1000L + index, merchantName = "历史商户$index", accountName = "微信零钱"))
+        }
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        capture.capture(event("a11y:ignored-latest"), proposal.copy(amountMinor = 9000, merchantName = "忽略商户"))
+        capture.ignore(capture.candidates.first().single { it.state == "PENDING" }.id)
+        capture.clearResolved()
+        capture.capture(event("a11y:pending-latest").copy(receivedAt = now + 1), proposal.copy(amountMinor = 10000, merchantName = "待确认商户"))
+        val history = capture.accessibilityReceipts("user-0")
+        assertEquals(64, history.size)
+        assertTrue(history.any { it.session == "a11y:ignored-latest" })
+        assertTrue(history.any { it.session == "a11y:pending-latest" })
+        assertEquals(setOf("a11y:ignored-latest", "a11y:pending-latest"), history.take(2).map { it.session }.toSet())
+        val tracker = ReceiptSessionTracker("user-0") { "a11y:unexpected-new-session" }
+        history.forEach { tracker.seed(it.source, it.kind, it.amountMinor, it.merchant, it.session) }
+        assertEquals("a11y:ignored-latest", tracker.success(source, proposal.copy(amountMinor = 9000), "忽略商户", capture.settings.first().generation, now).session)
+    }
+    @Test fun editedConfirmationMerchantStillSeedsOriginalRecognitionForReplay() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        val notification = event("a11y:edited-merchant")
+        capture.capture(notification, proposal.copy(merchantName = "识别商户"))
+        val pending = capture.candidates.first().single()
+        capture.confirm(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now, merchant = "用户修正商户"))
+        val history = capture.accessibilityReceipts("user-0")
+        assertEquals("识别商户", history.single().merchant)
+        val tracker = ReceiptSessionTracker("user-0") { "a11y:unexpected-new-session" }
+        history.forEach { tracker.seed(it.source, it.kind, it.amountMinor, it.merchant, it.session) }
+        assertEquals(notification.sessionKey, tracker.success(source, proposal, "识别商户", notification.generation, now).session)
+    }
+    @Test fun confirmationCreatesRecognizedAccountOnlyWhenConfirmedAndIsIdempotent() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        val accountName = "测试银行储蓄卡（5678）"
+        capture.capture(event("confirm-account"), proposal.copy(accountName = accountName))
+        val pending = capture.candidates.first().single()
+        assertEquals(4, ledger.accounts.first().size)
+        val id = capture.confirmWithAccount(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now), accountName)
+        assertEquals(5, ledger.accounts.first().size)
+        val account = ledger.accounts.first().single { it.name == accountName }
+        assertEquals(account.id, ledger.get(id)!!.accountId)
+        assertEquals(id, capture.confirmWithAccount(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now), "另一银行储蓄卡（9999）"))
+        assertEquals(5, ledger.accounts.first().size)
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun invalidConfirmationRollsBackNewRecognizedAccountAndLeavesCandidatePending() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        capture.capture(event("invalid-account"), proposal)
+        val pending = capture.candidates.first().single()
+        val before = ledger.accounts.first()
+        try {
+            capture.confirmWithAccount(pending.id, TransactionDraft(TransactionKind.EXPENSE, 0, now), "测试银行储蓄卡（5678）")
+            fail("invalid confirmation accepted")
+        } catch (_: IllegalArgumentException) { }
+        assertEquals(before, ledger.accounts.first())
+        assertEquals("PENDING", capture.candidate(pending.id).first()!!.state)
+        assertEquals(0, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun explicitUnspecifiedAccountAndExistingSelectionDoNotGuessOrCreateRecognizedAccounts() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        val name = "测试银行储蓄卡（5678）"
+        capture.capture(event("unspecified"), proposal.copy(accountName = name))
+        val unspecified = capture.candidates.first().single()
+        val noAccount = capture.confirmWithAccount(unspecified.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now), null)
+        assertNull(ledger.get(noAccount)!!.accountId)
+        capture.capture(event("explicit-selection"), proposal.copy(accountName = name))
+        val selected = capture.candidates.first().single { it.state == "PENDING" }
+        val chosen = capture.confirmWithAccount(selected.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now, accountId = "account-0"), name)
+        assertEquals("account-0", ledger.get(chosen)!!.accountId)
+        assertEquals(4, ledger.accounts.first().size)
+    }
+    @Test fun confirmationMatchesExistingBankIdentityAndDoesNotGuessAmbiguousOrArchivedAccounts() = runBlocking {
+        val debit = ledger.saveAccount("测试银行储蓄卡（1234）")
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        suspend fun confirmed(session: String): String {
+            capture.capture(event(session), proposal)
+            val pending = capture.candidates.first().single { it.state == "PENDING" }
+            return capture.confirmWithAccount(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now), "测试银行（1234）")
+        }
+        assertEquals(debit, ledger.get(confirmed("one-bank"))!!.accountId)
+        ledger.saveAccount("测试银行信用卡（1234）")
+        assertNull(ledger.get(confirmed("ambiguous-bank"))!!.accountId)
+        ledger.archiveAccount(debit)
+        capture.capture(event("archived-bank"), proposal)
+        val pending = capture.candidates.first().single { it.state == "PENDING" }
+        val archived = capture.confirmWithAccount(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now), "测试银行储蓄卡（1234）")
+        assertNull(ledger.get(archived)!!.accountId)
+        assertEquals(6, ledger.accounts.first().size)
+    }
+    @Test fun existingDirectSessionAndLegacyPendingAreReusedInConfirmModeWhenDirectionChanges() = runBlocking {
+        enable()
+        capture.capture(event("existing-session"), proposal)
+        val original = capture.candidates.first().single().transactionId!!
+        database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity(
+            "legacy-pending", source, "user-0", "existing-session", "legacy-update", 100, now, 1234, "EXPENSE", "UNVERIFIED_TEMPLATE",
+        ))
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        capture.capture(event("existing-session", "refund-direction"), proposal.copy(kind = TransactionKind.REFUND))
+        assertEquals(0, capture.pendingCount.first())
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+        assertTrue(capture.candidates.first().all { it.transactionId == original })
+    }
+    @Test fun confirmationModePersistsStructuredCandidateWithoutFinancialEffectsAndMergesUpdates() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        val accountCount = ledger.accounts.first().size
+        val balances = ledger.accountBalances().first()
+        val initial = event("a11y:pending", "initial")
+        assertTrue(capture.capture(initial, proposal.copy(merchantName = "餐厅", accountName = "新银行储蓄卡（5678）", originalAmountMinor = 1500, discountMinor = 266)))
+        val first = capture.candidates.first().single()
+        assertEquals(first.id, capture.capturedCandidateId(initial))
+        assertEquals("PENDING", first.state)
+        assertEquals("餐厅", first.merchant)
+        assertEquals("新银行储蓄卡（5678）", first.accountName)
+        assertEquals(1500L, first.originalAmountMinor)
+        assertEquals(266L, first.discountMinor)
+        assertEquals(0, database.ledgerDao().allTransactionsForBackup().size)
+        assertEquals(accountCount, ledger.accounts.first().size)
+        assertEquals(balances, ledger.accountBalances().first())
+        assertEquals(LedgerSummary(), ledger.summary(period).first())
+        assertEquals("a11y:pending", capture.accessibilityReceipts("user-0").single().session)
+        assertTrue(capture.capture(event("a11y:pending", "updated"), proposal.copy(amountMinor = 999, merchantName = "新商户")))
+        assertEquals(first.id, capture.candidates.first().single().id)
+        assertEquals(first.id, capture.capturedCandidateId(event("a11y:pending", "updated")))
+        assertEquals(999L, capture.candidate(first.id).first()!!.amountMinor)
+        assertEquals("新银行储蓄卡（5678）", capture.candidate(first.id).first()!!.accountName)
+        assertNull(capture.candidate(first.id).first()!!.discountMinor)
+        assertEquals(1, capture.pendingCount.first())
+        assertFalse(capture.capture(event("a11y:pending", "updated"), proposal))
+    }
+    @Test fun bookingModeInvalidatesQueuedEventsButDailySummaryDoesNotAndOldPendingIsPreserved() = runBlocking {
+        assertEquals(CaptureBookingMode.DIRECT, capture.settings.first().bookingMode)
+        assertTrue(capture.settings.first().dailySummaryEnabled)
+        enable()
+        val queued = event("queued")
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        assertFalse(capture.capture(queued, proposal))
+        val fresh = event("pending")
+        capture.setDailySummaryEnabled(false)
+        assertEquals(fresh.generation, capture.settings.first().generation)
+        assertTrue(capture.capture(fresh, proposal))
+        val id = capture.candidates.first().single().id
+        capture.setBookingMode(CaptureBookingMode.DIRECT)
+        assertTrue(capture.capture(event("pending", "after-switch"), proposal.copy(amountMinor = 900)))
+        assertEquals("PENDING", capture.candidate(id).first()!!.state)
+        assertEquals(0, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun editedConfirmationAndLaterSessionDirectionChangesNeverPostTwice() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        capture.capture(event("edited"), proposal)
+        val pending = capture.candidates.first().single()
+        val confirmedAt = now + 86400000L
+        val id = capture.confirm(pending.id, TransactionDraft(TransactionKind.INCOME, 700, confirmedAt, merchant = "修正商户", accountId = "account-0", note = "用户备注"))
+        capture.capture(event("edited", "refund"), proposal.copy(kind = TransactionKind.REFUND))
+        capture.setBookingMode(CaptureBookingMode.DIRECT)
+        capture.capture(event("edited", "original-expense"), proposal)
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+        assertEquals(700L, ledger.get(id)!!.amountMinor)
+        assertEquals(TransactionKind.INCOME, ledger.get(id)!!.kind)
+        assertEquals("account-0", ledger.get(id)!!.accountId)
+        assertEquals("用户备注", ledger.get(id)!!.note)
+        assertEquals(confirmedAt, ledger.get(id)!!.occurredAt)
+    }
+    @Test fun candidateLookupIncludesRecordsOutsideListWindowAndHiddenTombstones() = runBlocking {
+        repeat(205) { index -> database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity(
+            "candidate-$index", source, "user-0", "session-$index", "digest-$index", 100, now + index, 1234, "EXPENSE", "UNVERIFIED_TEMPLATE", state = "IGNORED",
+        )) }
+        assertEquals(200, capture.candidates.first().size)
+        assertEquals("candidate-0", capture.candidate("candidate-0").first()!!.id)
+        capture.clearResolved()
+        assertTrue(capture.candidates.first().isEmpty())
+        assertEquals("IGNORED", capture.candidate("candidate-0").first()!!.state)
+    }
+    @Test fun concurrentIgnoreAndConfirmNeverCreatesMoreThanOneTransactionOrRevivesDismissedSession() = runBlocking {
+        enable()
+        capture.setBookingMode(CaptureBookingMode.CONFIRM)
+        capture.capture(event("a11y:race"), proposal)
+        val pending = capture.candidates.first().single()
+        listOf(async(Dispatchers.IO) { runCatching { capture.confirm(pending.id, TransactionDraft(TransactionKind.EXPENSE, 1234, now)) } },
+            async(Dispatchers.IO) { runCatching { capture.ignore(pending.id) } }).awaitAll()
+        val finalState = capture.candidate(pending.id).first()!!.state
+        assertTrue(finalState in setOf("IGNORED", "CONFIRMED"))
+        assertEquals(if (finalState == "CONFIRMED") 1 else 0, database.ledgerDao().allTransactionsForBackup().size)
+        capture.capture(event("a11y:race", "replayed"), proposal)
+        assertEquals(0, capture.pendingCount.first())
+        assertEquals(if (finalState == "CONFIRMED") 1 else 0, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun concurrentConfirmationOfLegacySessionUsesOneTransactionAcrossEditedDirections() = runBlocking {
+        listOf("first", "second").forEach { id ->
+            database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity(
+                id, source, "user-0", "shared-pending", id, 100, now, 1234, "EXPENSE", "UNVERIFIED_TEMPLATE",
+            ))
+        }
+        val ids = listOf("first", "second").mapIndexed { index, id -> async(Dispatchers.IO) {
+            capture.confirm(id, TransactionDraft(if (index == 0) TransactionKind.EXPENSE else TransactionKind.INCOME, 1234, now))
+        } }.awaitAll()
+        assertEquals(1, ids.distinct().size)
+        assertEquals(1, database.ledgerDao().allTransactionsForBackup().size)
+    }
+    @Test fun ignoredPendingSessionStaysDiscardedAfterRevisitAndClear() = runBlocking {
+        enable()
+        database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity(
+            "discarded", source, "user-0", "a11y:discarded", "first", 100, now, 1234, "EXPENSE", "UNVERIFIED_TEMPLATE",
+        ))
+        capture.ignore("discarded")
+        capture.ignore("discarded")
+        capture.clearResolved()
+        assertFalse(capture.capture(event("a11y:discarded", "revisit"), proposal))
+        assertEquals(0, database.ledgerDao().allTransactionsForBackup().size)
+        assertEquals("a11y:discarded", capture.accessibilityReceipts("user-0").single().session)
+    }
+    @Test fun explicitRefundConfirmationUsesEditedDraftAndIsIdempotent() = runBlocking {
+        database.captureDao().insert(io.qingledger.data.database.NotificationCandidateEntity(
+            "pending-refund", source, "user-0", "refund-session", "refund-digest", 100, now,
+            1234, "REFUND", "REFUND_REVIEW",
+        ))
+        val confirmedAt = now + 86400000L
+        val draft = TransactionDraft(TransactionKind.REFUND, 999, confirmedAt, merchant = "用户修改")
+        val id = capture.confirm("pending-refund", draft)
+        assertEquals(id, capture.confirm("pending-refund", draft.copy(kind = TransactionKind.INCOME)))
+        val transaction = ledger.get(id)!!
+        assertEquals(TransactionKind.REFUND, transaction.kind)
+        assertEquals(999L, transaction.amountMinor)
+        assertEquals(confirmedAt, transaction.occurredAt)
+        assertEquals("用户修改", transaction.merchant)
+        assertEquals(source, transaction.sourcePackage)
+        assertEquals(1, capture.overview(PeriodRange(confirmedAt, confirmedAt + 1)).first().todayCount)
+        assertEquals(0, capture.overview(PeriodRange(now, now + 1)).first().todayCount)
+    }
     @Test fun legacyReceiptSeedsReplayAndDoesNotLoseItsAccountButFreshPaymentStillPosts() = runBlocking {
         enable()
         val legacy = "a11y:" + "a".repeat(64)
@@ -136,7 +375,7 @@ class RoomCaptureRepositoryTest {
         capture = RoomCaptureRepository(database, ledger)
     }
     @After fun teardown() { database.close() }
-    @Test fun overviewCountIncludesHiddenRecordsAndIgnoresListLimitAndManualConfirmation() = runBlocking {
+    @Test fun overviewCountIncludesHiddenConfirmedRecordsAndIgnoresListLimit() = runBlocking {
         enable()
         repeat(205) { i ->
             val e = event("overview-$i").copy(receivedAt = now + i * 180000L)
@@ -151,7 +390,7 @@ class RoomCaptureRepositoryTest {
         capture.confirm(manual.id, TransactionDraft(TransactionKind.EXPENSE, 1500, now + 205 * 180000L))
         capture.clearResolved()
         assertTrue(capture.candidates.first().isEmpty())
-        assertEquals(205, capture.overview(PeriodRange(now, now + 206 * 180000L)).first().todayCount)
+        assertEquals(206, capture.overview(PeriodRange(now, now + 206 * 180000L)).first().todayCount)
         assertEquals(0, capture.overview(PeriodRange(now - 1, now)).first().todayCount)
     }
     private suspend fun enable() { capture.setSource(source, true); capture.setEnabled(true) }
